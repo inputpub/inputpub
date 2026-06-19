@@ -1,0 +1,166 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* Top bar */
+.topbar {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.7rem 1.1rem;
+  border-bottom: 1px solid var(--line);
+}
+.brand {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.tagline {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* Editor area */
+.main {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  justify-content: center;
+}
+.editor {
+  width: 100%;
+  max-width: 760px;
+}
+.editor .milkdown {
+  height: 100%;
+}
+
+/* Bottom dock with targets */
+.dock {
+  flex: none;
+  border-top: 1px solid var(--line);
+  padding: 0.6rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: center;
+}
+.targets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+}
+.target {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.target:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.target:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.target-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+/* Status line */
+.status {
+  font-size: 0.8rem;
+  text-align: center;
+}
+.status.ok {
+  color: var(--accent);
+}
+.status.error {
+  color: #d93636;
+}
+
+/* Config dialog */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 50;
+}
+.dialog {
+  width: 100%;
+  max-width: 420px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+.dialog h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.dialog-note {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+}
+.field input {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+}
+.field input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+.dialog-actions button {
+  padding: 0.45rem 0.9rem;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+.dialog-actions button.ghost {
+  background: transparent;
+  color: inherit;
+  border-color: var(--line);
+}
+.dialog-actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
