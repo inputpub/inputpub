@@ -52,6 +52,47 @@
   }
 }
 
+/* ---- Print: strip UI chrome, print only a clean black-on-white sheet ---- */
+@media print {
+  .publish,
+  .toast,
+  .overlay {
+    display: none !important;
+  }
+  .sheet-area {
+    padding: 0;
+    min-height: 0;
+    background: #fff;
+  }
+  .sheet {
+    max-width: none;
+    width: auto;
+    min-height: 0;
+    height: auto;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    background: #fff;
+  }
+  .sheet .milkdown .ProseMirror {
+    min-height: 0;
+  }
+  /* Force readable light colors regardless of the on-screen color scheme. */
+  .sheet .milkdown {
+    --text: #000;
+    --muted: #444;
+    --surface: #fff;
+    --paper: #fff;
+    --line: #ccc;
+    --hover: #f0f0f0;
+    --selection: #e5e5e5;
+  }
+  @page {
+    margin: 16mm;
+  }
+}
+
 /* ---- Publish button (top-right) ---- */
 .publish {
   position: fixed;
