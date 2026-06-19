@@ -1,15 +1,23 @@
 :root {
+  /* Vercel-style black & white palette (light) */
   --bg: #ffffff;
   --surface: #ffffff;
-  --backdrop: #f0f0f3;
+  --backdrop: #fafafa;
   --paper: #ffffff;
-  --hover: #f2f2f5;
-  --text: #1a1a1a;
-  --muted: #8a8a8a;
-  --line: #e6e6e6;
-  --accent: #aa3bff;
+  --hover: #f5f5f5;
+  --selection: #e5e5e5;
+  --text: #000000;
+  --muted: #666666;
+  --line: #eaeaea;
+  --accent: #000000;
+  /* Primary button (inverts text/bg) */
+  --btn-bg: #000000;
+  --btn-fg: #ffffff;
 
-  font: 16px/1.5 system-ui, 'Segoe UI', Roboto, sans-serif;
+  --sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  font: 16px/1.6 var(--sans);
   color-scheme: light dark;
   color: var(--text);
   background: var(--bg);
@@ -19,15 +27,18 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #16171d;
-    --surface: #1f2028;
-    --backdrop: #0e0f13;
-    --paper: #1b1c22;
-    --hover: #2a2c36;
-    --text: #f3f4f6;
-    --muted: #9ca3af;
-    --line: #2e303a;
-    --accent: #c084fc;
+    --bg: #000000;
+    --surface: #0a0a0a;
+    --backdrop: #000000;
+    --paper: #0a0a0a;
+    --hover: #1a1a1a;
+    --selection: #2a2a2a;
+    --text: #ededed;
+    --muted: #888888;
+    --line: #2a2a2a;
+    --accent: #ffffff;
+    --btn-bg: #ffffff;
+    --btn-fg: #000000;
   }
 }
 
@@ -40,4 +51,31 @@ body,
 #root {
   margin: 0;
   height: 100%;
+}
+
+::selection {
+  background: var(--selection);
+}
+
+/* ---- Make the Milkdown editor follow our black & white palette ---- */
+.milkdown {
+  /* Unify heading + body typeface (frame theme defaults headings to serif). */
+  --crepe-font-title: var(--sans);
+  --crepe-font-default: var(--sans);
+  --crepe-font-code: var(--mono);
+
+  --crepe-color-background: transparent;
+  --crepe-color-on-background: var(--text);
+  --crepe-color-surface: var(--surface);
+  --crepe-color-surface-low: var(--surface);
+  --crepe-color-on-surface: var(--text);
+  --crepe-color-on-surface-variant: var(--muted);
+  --crepe-color-outline: var(--line);
+  --crepe-color-primary: var(--text);
+  --crepe-color-secondary: var(--hover);
+  --crepe-color-on-secondary: var(--text);
+  --crepe-color-hover: var(--hover);
+  --crepe-color-selected: var(--selection);
+  --crepe-color-inline-code: var(--muted);
+  --crepe-color-inline-area: var(--hover);
 }

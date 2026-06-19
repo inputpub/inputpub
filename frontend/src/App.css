@@ -14,16 +14,26 @@
 }
 .sheet {
   width: 100%;
-  max-width: 794px; /* A4 width @96dpi */
+  max-width: 820px; /* a touch wider than A4 for a roomier writing column */
   min-height: 1123px; /* A4 height @96dpi */
   height: max-content;
   background: var(--paper);
-  border-radius: 2px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 12px 32px rgba(0, 0, 0, 0.1);
-  padding: 64px 72px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
+  padding: 40px 44px;
+  display: flex;
 }
+/* Editor fills the sheet so the whole page is a writing surface. */
+.sheet .editor,
 .sheet .milkdown {
+  flex: 1;
+  width: 100%;
   background: transparent;
+}
+.sheet .milkdown .ProseMirror {
+  min-height: 1000px;
+  padding: 0;
 }
 
 @media (max-width: 640px) {
@@ -32,9 +42,10 @@
   }
   .sheet {
     min-height: 100dvh;
+    border: none;
     border-radius: 0;
     box-shadow: none;
-    padding: 3.5rem 1.25rem 2rem;
+    padding: 3.5rem 1.1rem 2rem;
   }
 }
 
@@ -47,14 +58,13 @@
 }
 .publish-btn {
   padding: 0.5rem 1.1rem;
-  border: none;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #fff;
+  border: 1px solid var(--btn-bg);
+  border-radius: 6px;
+  background: var(--btn-bg);
+  color: var(--btn-fg);
   font: inherit;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
   transition: opacity 0.15s, transform 0.05s;
 }
 .publish-btn:hover:not(:disabled) {
@@ -72,12 +82,12 @@
   position: absolute;
   top: calc(100% + 0.5rem);
   right: 0;
-  min-width: 180px;
-  padding: 0.35rem;
+  min-width: 184px;
+  padding: 0.3rem;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 12px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
@@ -119,10 +129,11 @@
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
 }
 .toast.ok {
-  background: #2c8a4a;
+  background: var(--btn-bg);
+  color: var(--btn-fg);
 }
 .toast.error {
-  background: #d93636;
+  background: #e5484d;
 }
 
 /* ---- Config dialog ---- */
@@ -181,10 +192,10 @@
 }
 .dialog-actions button {
   padding: 0.45rem 0.9rem;
-  border: 1px solid var(--accent);
-  border-radius: 8px;
-  background: var(--accent);
-  color: #fff;
+  border: 1px solid var(--btn-bg);
+  border-radius: 6px;
+  background: var(--btn-bg);
+  color: var(--btn-fg);
   font: inherit;
   cursor: pointer;
 }
