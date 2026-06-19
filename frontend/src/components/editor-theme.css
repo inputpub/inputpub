@@ -1,0 +1,59 @@
+/* ---------------------------------------------------------------------------
+   All Milkdown / Crepe theme overrides live here, in one place.
+
+   Imported in Editor.tsx *after* the Crepe theme stylesheets, so equal-
+   specificity rules here win, and the editor is mapped onto the app's
+   black & white palette (the --bg/--text/... vars from index.css).
+--------------------------------------------------------------------------- */
+
+.milkdown {
+  /* Typography — unify heading + body (frame theme defaults headings to serif). */
+  --crepe-font-title: var(--sans);
+  --crepe-font-default: var(--sans);
+  --crepe-font-code: var(--mono);
+
+  /* Colors mapped onto our palette. */
+  --crepe-color-background: transparent;
+  --crepe-color-on-background: var(--text);
+  --crepe-color-surface: var(--surface);
+  --crepe-color-surface-low: var(--surface);
+  --crepe-color-on-surface: var(--text);
+  --crepe-color-on-surface-variant: var(--muted);
+  --crepe-color-outline: var(--line);
+  --crepe-color-primary: var(--text);
+  --crepe-color-secondary: var(--hover);
+  --crepe-color-on-secondary: var(--text);
+  --crepe-color-hover: var(--hover);
+  --crepe-color-selected: var(--selection);
+  --crepe-color-inline-code: var(--muted);
+  --crepe-color-inline-area: var(--hover);
+}
+
+/* Headings share the body typeface (only size/weight differ). */
+.milkdown .ProseMirror :is(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--sans);
+}
+
+/* Text cursor: Crepe renders a custom "virtual" caret colored with the faint
+   outline var. Darken it to --text. We deliberately do NOT set caret-color,
+   so the native caret stays hidden and there is only ONE visible cursor. */
+.milkdown .ProseMirror-focused {
+  --prosemirror-virtual-cursor-color: var(--text);
+}
+
+/* Per-line add / drag handles ship using the faint outline color (≈invisible). */
+.milkdown .milkdown-block-handle .operation-item svg {
+  fill: var(--muted);
+}
+.milkdown .milkdown-block-handle .operation-item:hover svg {
+  fill: var(--text);
+}
+
+/* Tables: default grid is outline@20% (barely visible) and icons use outline. */
+.milkdown .milkdown-table-block th,
+.milkdown .milkdown-table-block td {
+  border: 1px solid color-mix(in srgb, var(--text), transparent 80%);
+}
+.milkdown .milkdown-table-block svg {
+  fill: var(--muted);
+}

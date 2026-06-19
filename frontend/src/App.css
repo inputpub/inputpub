@@ -35,47 +35,9 @@
 .sheet .milkdown .ProseMirror {
   min-height: 1000px;
   padding: 0;
-  /* Make the text caret clearly visible. */
-  caret-color: var(--text);
 }
-
-/* The per-line add / drag handles ship nearly invisible (theme uses the
-   faint outline color); give them a readable gray. */
-.sheet .milkdown .milkdown-block-handle .operation-item svg {
-  fill: var(--muted);
-}
-.sheet .milkdown .milkdown-block-handle .operation-item:hover svg {
-  fill: var(--text);
-}
-
-/* ---- Map the Milkdown editor onto our black & white palette ----
-   Loaded after the Crepe theme so these win; scoped under .sheet for
-   specificity over the theme's own .milkdown defaults. */
-.sheet .milkdown {
-  --crepe-font-title: var(--sans);
-  --crepe-font-default: var(--sans);
-  --crepe-font-code: var(--mono);
-
-  --crepe-color-background: transparent;
-  --crepe-color-on-background: var(--text);
-  --crepe-color-surface: var(--surface);
-  --crepe-color-surface-low: var(--surface);
-  --crepe-color-on-surface: var(--text);
-  --crepe-color-on-surface-variant: var(--muted);
-  --crepe-color-outline: var(--line);
-  --crepe-color-primary: var(--text);
-  --crepe-color-secondary: var(--hover);
-  --crepe-color-on-secondary: var(--text);
-  --crepe-color-hover: var(--hover);
-  --crepe-color-selected: var(--selection);
-  --crepe-color-inline-code: var(--muted);
-  --crepe-color-inline-area: var(--hover);
-}
-
-/* Headings share the body typeface (only weight/size differ). */
-.sheet .milkdown .ProseMirror :is(h1, h2, h3, h4, h5, h6) {
-  font-family: var(--sans);
-}
+/* NOTE: all Milkdown/Crepe theme overrides (colors, fonts, cursor, handles,
+   tables) live in components/editor-theme.css. */
 
 @media (max-width: 640px) {
   .sheet-area {
