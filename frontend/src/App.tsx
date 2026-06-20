@@ -22,6 +22,7 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [configFor, setConfigFor] = useState<Destination | null>(null)
+  const [promptFor, setPromptFor] = useState<Destination | null>(null)
   const publishRef = useRef<HTMLDivElement>(null)
 
   // Close the publish menu on outside click / Escape.
@@ -46,15 +47,16 @@ function App() {
     return () => clearTimeout(t)
   }, [status])
 
-  const ctxFor = (dest: Destination) => ({
+  const ctxFor = (dest: Destination, input: Record<string, string>) => ({
     getConfig: (key: string) => getConfig(dest.id, key),
     setConfig: (key: string, value: string) => setConfig(dest.id, key, value),
+    input,
   })
 
   const isConfigured = (dest: Destination) =>
-    !dest.config || dest.config.every((f) => !!getConfig(dest.id, f.key))
+    !dest.config || dest.config.every((f) => f.optional || !!getConfig(dest.id, f.key))
 
-  async function run(dest: Destination) {
+  async function run(dest: Destination, input: Record<string, string> = {}) {
     const markdown = editorRef.current?.getMarkdown() ?? ''
     if (!markdown.trim()) {
       setStatus({ kind: 'error', text: '内容为空' })
@@ -63,7 +65,7 @@ function App() {
     setBusy(dest.id)
     setStatus(null)
     try {
-      const msg = await dest.send(markdown, ctxFor(dest))
+      const msg = await dest.send(markdown, ctxFor(dest, input))
       setStatus({ kind: 'ok', text: msg || `已发送到 ${dest.name}` })
     } catch (err) {
       setStatus({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -72,10 +74,16 @@ function App() {
     }
   }
 
+  // After config is satisfied, either collect publish-time input or run directly.
+  function proceed(dest: Destination) {
+    if (dest.prompt?.length) setPromptFor(dest)
+    else void run(dest)
+  }
+
   function pick(dest: Destination) {
     setMenuOpen(false)
     if (!isConfigured(dest)) setConfigFor(dest)
-    else void run(dest)
+    else proceed(dest)
   }
 
   return (
@@ -142,7 +150,18 @@ function App() {
           onClose={() => setConfigFor(null)}
           onSaved={(dest) => {
             setConfigFor(null)
-            void run(dest)
+            proceed(dest)
+          }}
+        />
+      )}
+
+      {promptFor && (
+        <PromptDialog
+          dest={promptFor}
+          onCancel={() => setPromptFor(null)}
+          onSubmit={(dest, values) => {
+            setPromptFor(null)
+            void run(dest, values)
           }}
         />
       )}
@@ -200,6 +219,55 @@ function ConfigDialog({
           </button>
           <button type="button" disabled={!canSave} onClick={save}>
             保存并发送
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PromptDialog({
+  dest,
+  onCancel,
+  onSubmit,
+}: {
+  dest: Destination
+  onCancel: () => void
+  onSubmit: (dest: Destination, values: Record<string, string>) => void
+}) {
+  const fields = dest.prompt ?? []
+  const [values, setValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(fields.map((f) => [f.key, ''])),
+  )
+  const canSubmit = fields.every((f) => f.optional || values[f.key]?.trim())
+
+  return (
+    <div className="overlay" onClick={onCancel}>
+      <div className="dialog" onClick={(e) => e.stopPropagation()}>
+        <h2>
+          {dest.icon} 发布到 {dest.name}
+        </h2>
+        {fields.map((f, i) => (
+          <label key={f.key} className="field">
+            <span>{f.label}</span>
+            <input
+              type={f.type ?? 'text'}
+              placeholder={f.placeholder}
+              value={values[f.key]}
+              autoFocus={i === 0}
+              onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && canSubmit) onSubmit(dest, values)
+              }}
+            />
+          </label>
+        ))}
+        <div className="dialog-actions">
+          <button type="button" className="ghost" onClick={onCancel}>
+            取消
+          </button>
+          <button type="button" disabled={!canSubmit} onClick={() => onSubmit(dest, values)}>
+            发布
           </button>
         </div>
       </div>
