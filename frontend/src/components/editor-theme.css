@@ -19,7 +19,11 @@
   --crepe-color-surface-low: var(--surface);
   --crepe-color-on-surface: var(--text);
   --crepe-color-on-surface-variant: var(--muted);
-  --crepe-color-outline: var(--line);
+  /* Crepe overloads `outline` for BOTH faint borders/dividers AND foreground
+     icons (block handles, slash-menu, toolbar, list markers, links, hr…).
+     Mapping it to a mid-gray makes all those icons visible at once; the
+     borders/dividers stay subtle because Crepe applies them at ~20% opacity. */
+  --crepe-color-outline: var(--muted);
   --crepe-color-primary: var(--text);
   --crepe-color-secondary: var(--hover);
   --crepe-color-on-secondary: var(--text);
@@ -41,19 +45,19 @@
   --prosemirror-virtual-cursor-color: var(--text);
 }
 
-/* Per-line add / drag handles ship using the faint outline color (≈invisible). */
-.milkdown .milkdown-block-handle .operation-item svg {
-  fill: var(--muted);
-}
+/* Block handle (+ / drag) icons darken on hover for clear affordance. */
 .milkdown .milkdown-block-handle .operation-item:hover svg {
   fill: var(--text);
 }
 
-/* Tables: default grid is outline@20% (barely visible) and icons use outline. */
+/* Horizontal rule (`---`): Crepe paints it as outline@20%, too faint to read
+   as a divider. Give it a clear, thin line. */
+.milkdown .ProseMirror hr {
+  background-color: color-mix(in srgb, var(--text), transparent 75%);
+}
+
+/* Table grid: a touch more contrast than the default. */
 .milkdown .milkdown-table-block th,
 .milkdown .milkdown-table-block td {
   border: 1px solid color-mix(in srgb, var(--text), transparent 80%);
-}
-.milkdown .milkdown-table-block svg {
-  fill: var(--muted);
 }
