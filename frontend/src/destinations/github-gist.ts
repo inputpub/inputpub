@@ -29,7 +29,7 @@ export const githubGist: Destination = {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        description: deriveTitle(markdown) || 'input pub',
+        description: deriveTitle(markdown) || 'Input Pub',
         public: false,
         files: { 'input.md': { content: markdown } },
       }),

@@ -86,7 +86,7 @@ export const github: Destination = {
       method: 'PUT',
       headers,
       body: JSON.stringify({
-        message: `${sha ? 'Update' : 'Add'} ${path} — ${deriveTitle(markdown) || 'input pub'}`,
+        message: `${sha ? 'Update' : 'Add'} ${path} — ${deriveTitle(markdown) || 'Input Pub'}`,
         content: toBase64(markdown),
         ...(sha ? { sha } : {}),
       }),

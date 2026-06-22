@@ -1,6 +1,6 @@
 {
-  "name": "input pub",
-  "short_name": "input pub",
+  "name": "Input Pub",
+  "short_name": "Input Pub",
   "description": "input here, publish anywhere",
   "start_url": "./",
   "scope": "./",

@@ -1,4 +1,4 @@
-# input pub
+# Input Pub
 
 **input here, publish anywhere** — a minimalist Markdown editor that publishes/sends your content to multiple destinations. Live at [inputpub.com](https://inputpub.com).
 
