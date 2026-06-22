@@ -8,11 +8,11 @@ export const x: Destination = {
   id: 'x',
   name: 'X',
   icon: XIcon,
-  hint: '280 字符上限，超出请自行精简',
+  hint: '280-character limit — trim if longer',
   send(markdown) {
     const text = markdownToText(markdown)
     const url = `https://x.com/intent/tweet?text=${encodeURIComponent(text)}`
     window.open(url, '_blank', 'noopener,noreferrer')
-    return '已打开 X 发推窗口'
+    return 'Opened the X compose window'
   },
 }

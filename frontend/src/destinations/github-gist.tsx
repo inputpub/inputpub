@@ -18,14 +18,14 @@ export const githubGist: Destination = {
       type: 'password',
       hint: (
         <>
-          用一个 classic token，勾选 <b>gist</b>。{' '}
+          Use a classic token with the <b>gist</b> scope.{' '}
           <a
             href="https://github.com/settings/tokens/new?scopes=gist&description=Input%20Pub%20(gist)"
             target="_blank"
             rel="noreferrer"
             onClick={(e) => e.stopPropagation()}
           >
-            去创建 ↗
+            Create one ↗
           </a>
         </>
       ),
@@ -33,7 +33,7 @@ export const githubGist: Destination = {
   ],
   async send(markdown, ctx) {
     const token = ctx.getConfig('token')
-    if (!token) throw new Error('缺少 GitHub Token')
+    if (!token) throw new Error('Missing GitHub token')
 
     const res = await fetch('https://api.github.com/gists', {
       method: 'POST',
@@ -51,11 +51,11 @@ export const githubGist: Destination = {
 
     if (!res.ok) {
       const detail = await res.text().catch(() => '')
-      throw new Error(`创建 Gist 失败 (${res.status})${detail ? `: ${detail.slice(0, 120)}` : ''}`)
+      throw new Error(`Couldn't create the gist (${res.status})${detail ? `: ${detail.slice(0, 120)}` : ''}`)
     }
 
     const data = (await res.json()) as { html_url?: string }
     if (data.html_url) window.open(data.html_url, '_blank', 'noopener,noreferrer')
-    return 'Gist 创建成功'
+    return 'Gist created'
   },
 }

@@ -37,9 +37,17 @@ export interface Destination {
   /** Whether the destination is shown in the menu by default (default: true). */
   defaultEnabled?: boolean
   /**
+   * Copy-and-paste destinations (no API / no URL prefill). When set, publishing
+   * copies the markdown to the clipboard, shows a prominent toast, then
+   * navigates to this URL after a short delay so the user can read the toast
+   * first and paste once they arrive. Such destinations don't need `send`.
+   */
+  clipboard?: { url: string }
+  /**
    * Perform the publish/send for the given markdown.
    * Throw to signal failure — the UI surfaces the message.
    * May return a result message (e.g. a created URL) shown on success.
+   * Optional for `clipboard` destinations, which are handled by the app.
    */
-  send: (markdown: string, ctx: DestinationContext) => Promise<string | void> | string | void
+  send?: (markdown: string, ctx: DestinationContext) => Promise<string | void> | string | void
 }

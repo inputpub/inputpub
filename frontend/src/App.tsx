@@ -14,7 +14,11 @@ import {
 } from './lib/storage'
 import './App.css'
 
-type Status = { kind: 'ok' | 'error'; text: string } | null
+type Status = { kind: 'ok' | 'error'; text: string; big?: boolean } | null
+
+/** Delay before a clipboard destination navigates away, so the user can read
+ *  the "copied" toast first. */
+const CLIPBOARD_OPEN_DELAY = 2000
 
 /** Where a config field is stored: a shared global key, or the destination's
  *  own namespace. Lets GitHub + Gist share one token. */
@@ -97,14 +101,37 @@ function App() {
   async function run(dest: Destination, input: Record<string, string> = {}) {
     const markdown = editorRef.current?.getMarkdown() ?? ''
     if (!markdown.trim()) {
-      setStatus({ kind: 'error', text: '内容为空' })
+      setStatus({ kind: 'error', text: 'Nothing to publish' })
       return
     }
     setBusy(dest.id)
     setStatus(null)
     try {
-      const msg = await dest.send(markdown, ctxFor(dest, input))
-      setStatus({ kind: 'ok', text: msg || `已发送到 ${dest.name}` })
+      // Copy-and-paste destinations: copy, show a prominent toast, then
+      // navigate (same tab) after a beat so the user reads it before leaving.
+      if (dest.clipboard) {
+        let copied = false
+        try {
+          await navigator.clipboard.writeText(markdown)
+          copied = true
+        } catch {
+          // clipboard may be unavailable; still send the user over
+        }
+        setStatus({
+          kind: 'ok',
+          big: true,
+          text: copied
+            ? `Copied to clipboard. Opening ${dest.name} — paste it there.`
+            : `Opening ${dest.name} — copy your text and paste it there.`,
+        })
+        const { url } = dest.clipboard
+        setTimeout(() => {
+          window.location.href = url
+        }, CLIPBOARD_OPEN_DELAY)
+        return
+      }
+      const msg = await dest.send?.(markdown, ctxFor(dest, input))
+      setStatus({ kind: 'ok', text: msg || `Sent to ${dest.name}` })
     } catch (err) {
       setStatus({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     } finally {
@@ -136,7 +163,7 @@ function App() {
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((o) => !o)}
           >
-            <span>{busy ? '发布中…' : 'Publish'}</span>
+            <span>{busy ? 'Publishing…' : 'Publish'}</span>
             <svg
               className="publish-caret"
               width="12"
@@ -180,7 +207,7 @@ function App() {
                 }}
               >
                 <span className="publish-item-icon">{GearIcon}</span>
-                <span className="publish-item-name">设置</span>
+                <span className="publish-item-name">Settings</span>
               </button>
             </div>
           )}
@@ -194,7 +221,7 @@ function App() {
       </main>
 
       {status && (
-        <div className={`toast ${status.kind}`} role="status">
+        <div className={`toast ${status.kind}${status.big ? ' big' : ''}`} role="status">
           {status.text}
         </div>
       )}
@@ -259,9 +286,9 @@ function ConfigDialog({
     <div className="overlay" onClick={onClose}>
       <div className="dialog" onClick={(e) => e.stopPropagation()}>
         <h2>
-          {dest.icon} {dest.name} 配置
+          {dest.icon} {dest.name} settings
         </h2>
-        <p className="dialog-note">仅保存在本浏览器（localStorage），不会上传。</p>
+        <p className="dialog-note">Saved only in this browser (localStorage); never uploaded.</p>
         {(dest.config ?? []).map((f) => (
           <label key={f.key} className="field">
             <span>{f.label}</span>
@@ -280,10 +307,10 @@ function ConfigDialog({
         ))}
         <div className="dialog-actions">
           <button type="button" className="ghost" onClick={onClose}>
-            取消
+            Cancel
           </button>
           <button type="button" disabled={!canSave} onClick={save}>
-            保存并发送
+            Save & publish
           </button>
         </div>
       </div>
@@ -310,7 +337,7 @@ function PromptDialog({
     <div className="overlay" onClick={onCancel}>
       <div className="dialog" onClick={(e) => e.stopPropagation()}>
         <h2>
-          {dest.icon} 发布到 {dest.name}
+          {dest.icon} Publish to {dest.name}
         </h2>
         {fields.map((f, i) => (
           <label key={f.key} className="field">
@@ -329,10 +356,10 @@ function PromptDialog({
         ))}
         <div className="dialog-actions">
           <button type="button" className="ghost" onClick={onCancel}>
-            取消
+            Cancel
           </button>
           <button type="button" disabled={!canSubmit} onClick={() => onSubmit(dest, values)}>
-            发布
+            Publish
           </button>
         </div>
       </div>
@@ -387,9 +414,10 @@ function SettingsDialog({
   return (
     <div className="overlay" onClick={onClose}>
       <div className="dialog" onClick={(e) => e.stopPropagation()}>
-        <h2>设置</h2>
+        <h2>Settings</h2>
         <p className="dialog-note">
-          每个目标可单独开关；带配置的目标在下方填写。仅保存在本浏览器（localStorage），不会上传。
+          Toggle each destination on or off; expand the ones with a chevron to configure them. Saved
+          only in this browser (localStorage); never uploaded.
         </p>
 
         <div className="settings-dests">
@@ -457,10 +485,10 @@ function SettingsDialog({
 
         <div className="dialog-actions">
           <button type="button" className="ghost" onClick={onClose}>
-            关闭
+            Close
           </button>
           <button type="button" onClick={save}>
-            {saved ? '已保存' : '保存'}
+            {saved ? 'Saved' : 'Save'}
           </button>
         </div>
       </div>

@@ -14,6 +14,6 @@ export const email: Destination = {
     const body = markdownToText(markdown)
     const url = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
     window.location.href = url
-    return '已唤起邮件客户端'
+    return 'Opened your mail app'
   },
 }

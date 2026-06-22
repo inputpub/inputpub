@@ -271,6 +271,18 @@
 .toast.error {
   background: #e5484d;
 }
+/* Prominent variant for clipboard hand-offs: centered, larger, hard to miss. */
+.toast.big {
+  bottom: auto;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  max-width: min(90vw, 30rem);
+  padding: 1rem 1.4rem;
+  font-size: 1rem;
+  line-height: 1.45;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
 
 /* ---- Config dialog ---- */
 .overlay {
