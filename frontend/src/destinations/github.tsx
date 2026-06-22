@@ -26,12 +26,11 @@ export const github: Destination = {
       label: 'GitHub Token',
       type: 'password',
       placeholder: 'ghp_…',
-      shared: 'github-token', // one token for both GitHub + Gist
       hint: (
         <>
-          用一个 classic token，勾选 <b>repo</b> + <b>gist</b>（同时用于发布到仓库和 Gist）。{' '}
+          用一个 classic token，勾选 <b>repo</b>。{' '}
           <a
-            href="https://github.com/settings/tokens/new?scopes=repo,gist&description=Input%20Pub"
+            href="https://github.com/settings/tokens/new?scopes=repo&description=Input%20Pub%20(repo)"
             target="_blank"
             rel="noreferrer"
             onClick={(e) => e.stopPropagation()}

@@ -16,8 +16,7 @@ export const githubGist: Destination = {
       label: 'GitHub Token',
       placeholder: 'ghp_…',
       type: 'password',
-      shared: 'github-token', // same token as the GitHub destination
-      hint: '与 GitHub 共用一个 token（classic，需 gist 权限）。',
+      hint: '用一个 classic token，勾选 gist 权限。',
     },
   ],
   async send(markdown, ctx) {
