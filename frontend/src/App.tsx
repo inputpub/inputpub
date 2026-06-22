@@ -216,7 +216,18 @@ function App() {
 
       <main className="sheet-area">
         <div className="sheet">
-          <Editor ref={editorRef} defaultValue={initialDraft} onChange={persist} />
+          <Editor
+            ref={editorRef}
+            defaultValue={initialDraft}
+            onChange={persist}
+            onImageUploadAttempt={() =>
+              setStatus({
+                kind: 'ok',
+                big: true,
+                text: 'Image upload is a paid feature, still in the works. For now, paste an image URL instead.',
+              })
+            }
+          />
         </div>
       </main>
 
