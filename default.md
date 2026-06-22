@@ -1,4 +1,4 @@
-# Input.pub
+# Input pub
 
 Input here, publish anywhere
 

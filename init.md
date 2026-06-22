@@ -1,4 +1,4 @@
-# [input.pub](http://input.pub)
+# input pub
 
 input here, publish anywhere
 

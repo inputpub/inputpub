@@ -89,7 +89,10 @@
   position: relative;
 }
 .publish-btn {
-  padding: 0.1rem 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.1rem 0.7rem 0.1rem 1rem;
   border: 1px solid var(--btn-bg);
   border-radius: 6px;
   background: var(--btn-bg);
@@ -98,6 +101,14 @@
   font-weight: 500;
   cursor: pointer;
   transition: opacity 0.15s, transform 0.05s;
+}
+.publish-caret {
+  flex: none;
+  opacity: 0.8;
+  transition: transform 0.15s ease;
+}
+.publish-btn[aria-expanded='true'] .publish-caret {
+  transform: rotate(180deg);
 }
 .publish-btn:hover:not(:disabled) {
   opacity: 0.92;
