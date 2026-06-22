@@ -9,7 +9,7 @@ export const email: Destination = {
   name: 'Email',
   icon: '✉️',
   send(markdown) {
-    const subject = deriveTitle(markdown) || 'input.pub'
+    const subject = deriveTitle(markdown) || 'input pub'
     const body = markdownToText(markdown)
     const url = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
     window.location.href = url
