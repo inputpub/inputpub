@@ -1,1 +1,2 @@
 - pro 上线时送一些年度会员
+- input put skill

@@ -297,22 +297,36 @@ function ConfigDialog({
           {dest.icon} {dest.name} settings
         </h2>
         <p className="dialog-note">Saved only in this browser (localStorage); never uploaded.</p>
-        {(dest.config ?? []).map((f) => (
-          <label key={f.key} className="field">
-            <span>{f.label}</span>
-            <input
-              type={f.type ?? 'text'}
-              placeholder={f.placeholder}
-              value={values[f.key]}
-              autoFocus
-              onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && canSave) save()
-              }}
-            />
-            {f.hint && <span className="field-hint">{f.hint}</span>}
-          </label>
-        ))}
+        {(dest.config ?? []).map((f) =>
+          f.type === 'textarea' ? (
+            <label key={f.key} className="field">
+              <span>{f.label}</span>
+              <textarea
+                className="field-textarea"
+                placeholder={f.placeholder}
+                value={values[f.key]}
+                rows={6}
+                onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+              />
+              {f.hint && <span className="field-hint">{f.hint}</span>}
+            </label>
+          ) : (
+            <label key={f.key} className="field">
+              <span>{f.label}</span>
+              <input
+                type={f.type ?? 'text'}
+                placeholder={f.placeholder}
+                value={values[f.key]}
+                autoFocus
+                onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && canSave) save()
+                }}
+              />
+              {f.hint && <span className="field-hint">{f.hint}</span>}
+            </label>
+          ),
+        )}
         <div className="dialog-actions">
           <button type="button" className="ghost" onClick={onClose}>
             Cancel
@@ -473,14 +487,26 @@ function SettingsDialog({
                   {fieldsByDest[d.id].map((f) => (
                     <label key={f.key} className="field">
                       <span>{f.label}</span>
-                      <input
-                        type={f.type ?? 'text'}
-                        placeholder={f.placeholder}
-                        value={values[locKey(d, f)]}
-                        onChange={(e) =>
-                          setValues((v) => ({ ...v, [locKey(d, f)]: e.target.value }))
-                        }
-                      />
+                      {f.type === 'textarea' ? (
+                        <textarea
+                          className="field-textarea"
+                          placeholder={f.placeholder}
+                          value={values[locKey(d, f)]}
+                          rows={6}
+                          onChange={(e) =>
+                            setValues((v) => ({ ...v, [locKey(d, f)]: e.target.value }))
+                          }
+                        />
+                      ) : (
+                        <input
+                          type={f.type ?? 'text'}
+                          placeholder={f.placeholder}
+                          value={values[locKey(d, f)]}
+                          onChange={(e) =>
+                            setValues((v) => ({ ...v, [locKey(d, f)]: e.target.value }))
+                          }
+                        />
+                      )}
                       {f.hint && <span className="field-hint">{f.hint}</span>}
                     </label>
                   ))}

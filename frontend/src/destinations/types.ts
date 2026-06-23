@@ -4,7 +4,7 @@ export interface ConfigField {
   key: string
   label: string
   placeholder?: string
-  type?: 'text' | 'password'
+  type?: 'text' | 'password' | 'textarea'
   /** Optional fields don't block a destination from being "configured". */
   optional?: boolean
   /** Small helper text shown under the input (may contain a link). */

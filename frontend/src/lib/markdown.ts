@@ -41,3 +41,22 @@ export function markdownToText(markdown: string): string {
   // Tidy whitespace.
   return text.replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim()
 }
+
+/** Remove the first top-level `# ` heading (and a blank line after it). Used to
+ *  drop the title from the body once it's been lifted into front matter. */
+export function stripFirstH1(markdown: string): string {
+  const lines = markdown.replace(/\r\n/g, '\n').split('\n')
+  const i = lines.findIndex((l) => /^#\s+\S/.test(l))
+  if (i === -1) return markdown
+  lines.splice(i, 1)
+  if (lines[i] === '') lines.splice(i, 1) // collapse the gap the heading left
+  return lines.join('\n').replace(/^\n+/, '')
+}
+
+/** Drop inline image syntax `![alt](url)`, leaving surrounding text intact. */
+export function stripImages(markdown: string): string {
+  return markdown
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/[ \t]+$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+}

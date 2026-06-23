@@ -1,5 +1,6 @@
 import type { Destination } from './types'
 import { deriveTitle } from '../lib/title'
+import { renderTemplate, templateVars } from '../lib/template'
 import { GitHubIcon } from './icons'
 
 /** Encode a UTF-8 string to base64 (btoa alone breaks on non-Latin1, e.g. CJK). */
@@ -42,6 +43,21 @@ export const github: Destination = {
     },
     { key: 'repo', label: 'Repository (owner/repo)', placeholder: 'timqian/notes' },
     { key: 'dir', label: 'Folder (optional)', placeholder: 'posts', optional: true },
+    {
+      key: 'template',
+      label: 'Output template (optional)',
+      type: 'textarea',
+      optional: true,
+      placeholder: '---\ntitle: {{ title | quote }}\ndate: {{ date }}\n---\n\n{{ body | no-title }}',
+      hint: (
+        <>
+          Leave empty to commit the raw Markdown. Variables: <code>{'{{title}}'}</code>{' '}
+          <code>{'{{date}}'}</code> <code>{'{{datetime}}'}</code> <code>{'{{body}}'}</code> (raw){' '}
+          <code>{'{{filename}}'}</code>. Filters: <code>| plain</code> <code>| no-title</code>{' '}
+          <code>| no-images</code> <code>| quote</code>.
+        </>
+      ),
+    },
   ],
   prompt: [{ key: 'filename', label: 'File name', placeholder: 'my-post.md' }],
   async send(markdown, ctx) {
@@ -55,6 +71,10 @@ export const github: Destination = {
     if (!filename) throw new Error('Please enter a file name')
     if (!/\.[a-z0-9]+$/i.test(filename)) filename += '.md'
     const path = dir ? `${dir}/${filename}` : filename
+
+    // Optional output template (e.g. add front matter). Empty → raw Markdown.
+    const template = (ctx.getConfig('template') ?? '').trim()
+    const content = template ? renderTemplate(template, templateVars(markdown, { filename })) : markdown
 
     const base = `https://api.github.com/repos/${repo}/contents/${path
       .split('/')
@@ -82,7 +102,7 @@ export const github: Destination = {
       headers,
       body: JSON.stringify({
         message: `${sha ? 'Update' : 'Add'} ${path} — ${deriveTitle(markdown) || 'Input Pub'}`,
-        content: toBase64(markdown),
+        content: toBase64(content),
         ...(sha ? { sha } : {}),
       }),
     })

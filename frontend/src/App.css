@@ -338,6 +338,30 @@
   outline: none;
   border-color: var(--accent);
 }
+.field-textarea {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 5.5rem;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+.field-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.field-hint code {
+  font-size: 0.92em;
+  background: var(--hover);
+  padding: 0.05em 0.3em;
+  border-radius: 4px;
+}
 .field-hint {
   font-size: 0.72rem;
   line-height: 1.4;
