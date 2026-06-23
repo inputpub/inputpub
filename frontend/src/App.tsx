@@ -3,6 +3,7 @@ import { Editor, type EditorHandle } from './components/Editor'
 import { destinations, type Destination } from './destinations'
 import type { ConfigField } from './destinations/types'
 import { GearIcon } from './destinations/icons'
+import { renderTemplate, templateVars } from './lib/template'
 import {
   debounce,
   getConfig,
@@ -81,19 +82,28 @@ function App() {
     return () => clearTimeout(t)
   }, [status])
 
-  const ctxFor = (dest: Destination, input: Record<string, string>) => ({
-    getConfig: (key: string) => {
+  const ctxFor = (dest: Destination, input: Record<string, string>, markdown: string) => {
+    const get = (key: string) => {
       const f = findField(dest, key)
       const [d, k] = f ? fieldLoc(dest, f) : [dest.id, key]
       return getConfig(d, k)
-    },
-    setConfig: (key: string, value: string) => {
-      const f = findField(dest, key)
-      const [d, k] = f ? fieldLoc(dest, f) : [dest.id, key]
-      setConfig(d, k, value)
-    },
-    input,
-  })
+    }
+    return {
+      getConfig: get,
+      setConfig: (key: string, value: string) => {
+        const f = findField(dest, key)
+        const [d, k] = f ? fieldLoc(dest, f) : [dest.id, key]
+        setConfig(d, k, value)
+      },
+      input,
+      slot: (key: string) => {
+        const f = findField(dest, key)
+        const stored = (get(key) ?? '').trim()
+        const template = stored || f?.default || '{{ body }}'
+        return renderTemplate(template, templateVars(markdown, input))
+      },
+    }
+  }
 
   const isConfigured = (dest: Destination) =>
     !dest.config || dest.config.every((f) => f.optional || !!readField(dest, f))
@@ -110,9 +120,10 @@ function App() {
       // Copy-and-paste destinations: copy, show a prominent toast, then
       // navigate (same tab) after a beat so the user reads it before leaving.
       if (dest.clipboard) {
+        const text = ctxFor(dest, input, markdown).slot('content')
         let copied = false
         try {
-          await navigator.clipboard.writeText(markdown)
+          await navigator.clipboard.writeText(text)
           copied = true
         } catch {
           // clipboard may be unavailable; still send the user over
@@ -130,7 +141,7 @@ function App() {
         }, CLIPBOARD_OPEN_DELAY)
         return
       }
-      const msg = await dest.send?.(markdown, ctxFor(dest, input))
+      const msg = await dest.send?.(markdown, ctxFor(dest, input, markdown))
       setStatus({ kind: 'ok', text: msg || `Sent to ${dest.name}` })
     } catch (err) {
       setStatus({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -303,7 +314,7 @@ function ConfigDialog({
               <span>{f.label}</span>
               <textarea
                 className="field-textarea"
-                placeholder={f.placeholder}
+                placeholder={f.placeholder ?? f.default}
                 value={values[f.key]}
                 rows={6}
                 onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
@@ -315,7 +326,7 @@ function ConfigDialog({
               <span>{f.label}</span>
               <input
                 type={f.type ?? 'text'}
-                placeholder={f.placeholder}
+                placeholder={f.placeholder ?? f.default}
                 value={values[f.key]}
                 autoFocus
                 onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
@@ -490,7 +501,7 @@ function SettingsDialog({
                       {f.type === 'textarea' ? (
                         <textarea
                           className="field-textarea"
-                          placeholder={f.placeholder}
+                          placeholder={f.placeholder ?? f.default}
                           value={values[locKey(d, f)]}
                           rows={6}
                           onChange={(e) =>
@@ -500,7 +511,7 @@ function SettingsDialog({
                       ) : (
                         <input
                           type={f.type ?? 'text'}
-                          placeholder={f.placeholder}
+                          placeholder={f.placeholder ?? f.default}
                           value={values[locKey(d, f)]}
                           onChange={(e) =>
                             setValues((v) => ({ ...v, [locKey(d, f)]: e.target.value }))

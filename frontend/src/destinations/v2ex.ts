@@ -1,5 +1,6 @@
 import type { Destination } from './types'
 import { V2exIcon } from './icons'
+import { templateHint } from './templateHelp'
 
 /**
  * V2EX has no public topic-creation API or compose prefill, so the app copies
@@ -12,4 +13,14 @@ export const v2ex: Destination = {
   icon: V2exIcon,
   defaultEnabled: false,
   clipboard: { url: 'https://www.v2ex.com/write' },
+  config: [
+    {
+      key: 'content',
+      label: 'Content template',
+      type: 'textarea',
+      optional: true,
+      default: '{{ body }}',
+      hint: templateHint,
+    },
+  ],
 }

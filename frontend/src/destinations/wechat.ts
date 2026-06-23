@@ -1,5 +1,6 @@
 import type { Destination } from './types'
 import { WeChatIcon } from './icons'
+import { templateHint } from './templateHelp'
 
 /**
  * WeChat's Official Accounts platform has no public posting API, so copy the
@@ -12,4 +13,14 @@ export const wechat: Destination = {
   icon: WeChatIcon,
   defaultEnabled: false,
   clipboard: { url: 'https://mp.weixin.qq.com/' },
+  config: [
+    {
+      key: 'content',
+      label: 'Content template',
+      type: 'textarea',
+      optional: true,
+      default: '{{ body }}',
+      hint: templateHint,
+    },
+  ],
 }

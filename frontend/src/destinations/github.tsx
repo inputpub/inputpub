@@ -1,7 +1,7 @@
 import type { Destination } from './types'
 import { deriveTitle } from '../lib/title'
-import { renderTemplate, templateVars } from '../lib/template'
 import { GitHubIcon } from './icons'
+import { templateHint } from './templateHelp'
 
 /** Encode a UTF-8 string to base64 (btoa alone breaks on non-Latin1, e.g. CJK). */
 function toBase64(text: string): string {
@@ -44,19 +44,13 @@ export const github: Destination = {
     { key: 'repo', label: 'Repository (owner/repo)', placeholder: 'timqian/notes' },
     { key: 'dir', label: 'Folder (optional)', placeholder: 'posts', optional: true },
     {
-      key: 'template',
+      key: 'content',
       label: 'Output template (optional)',
       type: 'textarea',
       optional: true,
+      default: '{{ body }}',
       placeholder: '---\ntitle: {{ title | quote }}\ndate: {{ date }}\n---\n\n{{ body | no-title }}',
-      hint: (
-        <>
-          Leave empty to commit the raw Markdown. Variables: <code>{'{{title}}'}</code>{' '}
-          <code>{'{{date}}'}</code> <code>{'{{datetime}}'}</code> <code>{'{{body}}'}</code> (raw){' '}
-          <code>{'{{filename}}'}</code>. Filters: <code>| plain</code> <code>| no-title</code>{' '}
-          <code>| no-images</code> <code>| quote</code>.
-        </>
-      ),
+      hint: templateHint,
     },
   ],
   prompt: [{ key: 'filename', label: 'File name', placeholder: 'my-post.md' }],
@@ -72,9 +66,8 @@ export const github: Destination = {
     if (!/\.[a-z0-9]+$/i.test(filename)) filename += '.md'
     const path = dir ? `${dir}/${filename}` : filename
 
-    // Optional output template (e.g. add front matter). Empty → raw Markdown.
-    const template = (ctx.getConfig('template') ?? '').trim()
-    const content = template ? renderTemplate(template, templateVars(markdown, { filename })) : markdown
+    // Output template (default {{ body }} → raw Markdown; can add front matter).
+    const content = ctx.slot('content')
 
     const base = `https://api.github.com/repos/${repo}/contents/${path
       .split('/')

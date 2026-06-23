@@ -1,6 +1,6 @@
 import type { Destination } from './types'
-import { deriveTitle } from '../lib/title'
 import { GistIcon } from './icons'
+import { templateHint } from './templateHelp'
 
 /**
  * Create a private GitHub Gist using the user's own Personal Access Token,
@@ -30,8 +30,23 @@ export const githubGist: Destination = {
         </>
       ),
     },
+    {
+      key: 'description',
+      label: 'Description template',
+      default: '{{ title }}',
+      optional: true,
+      hint: templateHint,
+    },
+    {
+      key: 'content',
+      label: 'File content template',
+      type: 'textarea',
+      optional: true,
+      default: '{{ body }}',
+      hint: templateHint,
+    },
   ],
-  async send(markdown, ctx) {
+  async send(_markdown, ctx) {
     const token = ctx.getConfig('token')
     if (!token) throw new Error('Missing GitHub token')
 
@@ -43,9 +58,9 @@ export const githubGist: Destination = {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        description: deriveTitle(markdown) || 'Input Pub',
+        description: ctx.slot('description') || 'Input Pub',
         public: false,
-        files: { 'input.md': { content: markdown } },
+        files: { 'input.md': { content: ctx.slot('content') } },
       }),
     })
 

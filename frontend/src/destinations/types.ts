@@ -7,6 +7,9 @@ export interface ConfigField {
   type?: 'text' | 'password' | 'textarea'
   /** Optional fields don't block a destination from being "configured". */
   optional?: boolean
+  /** For template "slot" fields: the default template used when left empty.
+   *  Shown as the placeholder and applied by ctx.slot(). */
+  default?: string
   /** Small helper text shown under the input (may contain a link). */
   hint?: ReactNode
   /** If set, the value is stored under a global key shared across destinations
@@ -19,6 +22,9 @@ export interface DestinationContext {
   setConfig: (key: string, value: string) => void
   /** Values collected at publish time via the destination's `prompt` fields. */
   input: Record<string, string>
+  /** Render the template for a config field (its stored value, or its `default`
+   *  when empty) against the current note. Used for per-destination output. */
+  slot: (key: string) => string
 }
 
 export interface Destination {
