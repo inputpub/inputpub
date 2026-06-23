@@ -20,15 +20,28 @@
   flex-direction: column;
 }
 
+/* Lifted out of the card and pinned to the top-left so it stays visible. */
 .pro-back {
-  align-self: flex-start;
-  font-size: 0.8rem;
-  color: var(--muted);
+  position: fixed;
+  top: 1.25rem;
+  left: 1.25rem;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.85rem;
+  color: var(--text);
   text-decoration: none;
-  margin-bottom: 1.75rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.06);
+  transition: background 0.15s, border-color 0.15s;
 }
 .pro-back:hover {
-  color: var(--text);
+  background: var(--hover);
+  border-color: var(--muted);
 }
 
 .pro-title {

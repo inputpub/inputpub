@@ -6,11 +6,11 @@ import './Pro.css'
 function Pro() {
   return (
     <div className="pro">
-      <main className="pro-card">
-        <a className="pro-back" href="/">
-          ← Back to editor
-        </a>
+      <a className="pro-back" href="/">
+        ← Back to editor
+      </a>
 
+      <main className="pro-card">
         <h1 className="pro-title">Input Pub Pro</h1>
         <p className="pro-tagline">Everything in the free editor, plus a little more.</p>
 
