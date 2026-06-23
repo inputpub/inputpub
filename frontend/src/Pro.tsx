@@ -6,12 +6,13 @@ import './Pro.css'
 function Pro() {
   return (
     <div className="pro">
-      <a className="pro-back" href="/">
-        ← Back to editor
-      </a>
+      <div className="pro-wrap">
+        <a className="pro-back" href="/">
+          ← Back to editor
+        </a>
 
-      <main className="pro-card">
-        <h1 className="pro-title">Input Pub Pro</h1>
+        <main className="pro-card">
+          <h1 className="pro-title">Input Pub Pro</h1>
         <p className="pro-tagline">Everything in the free editor, plus a little more.</p>
 
         <div className="pro-price">
@@ -38,7 +39,8 @@ function Pro() {
           Get Pro
         </a>
         <p className="pro-note">Cancel anytime. The free editor stays free.</p>
-      </main>
+        </main>
+      </div>
     </div>
   )
 }
