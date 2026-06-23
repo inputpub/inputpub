@@ -1,9 +1,9 @@
-# Input Pub
+# [Input Pub](https://inputpub.com)
 
-**input here, publish anywhere** — a minimalist Markdown editor that publishes/sends your content to multiple destinations. Live at [inputpub.com](https://inputpub.com).
+Input [here](https://inputpub.com), publish anywhere — a minimalist Markdown editor that publishes to X, GitHub, Email, ChatGPT and more.
 
 - ✍️ Write once in a clean [Milkdown](https://milkdown.dev) WYSIWYG editor (auto-saved locally)
-- 🚀 Send to **X**, **GitHub** (commit a file to a repo), **GitHub Gist**, **Email**, and **ChatGPT**
+- 🚀 Send to **X**, **GitHub** (commit a file to a repo), **GitHub Gist**, **Email**, **ChatGPT** and more
 - 🧩 Plugin model — add a destination = one file + one line in [`frontend/src/destinations`](frontend/src/destinations)
 - 🪶 Pure frontend, no backend, no login. API targets use your own token stored in the browser.
 
