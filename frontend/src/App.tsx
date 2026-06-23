@@ -453,6 +453,7 @@ function SettingsDialog({
           only in this browser (localStorage); never uploaded.
         </p>
 
+        <div className="settings-scroll">
         <div className="settings-dests">
           {destinations.map((d) => {
             const hasConfig = fieldsByDest[d.id].length > 0
@@ -536,6 +537,7 @@ function SettingsDialog({
         >
           Suggest a new destination ↗
         </a>
+        </div>
 
         <div className="dialog-actions">
           <button type="button" className="ghost" onClick={onClose}>
