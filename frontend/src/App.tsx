@@ -162,11 +162,13 @@ function App() {
     // width + horizontal gutter; both the sheet and the fixed top bar derive
     // their edges from these, so Publish always lines up with the sheet's right
     // edge at any width.
-    <div className="min-h-dvh [--page-pad:1rem] [--sheet-max:820px] max-[700px]:[--page-pad:0.75rem]">
-      {/* Top bar: fixed to the page, but its inner edges align with the centered
-          sheet (same max-width + horizontal padding as the sheet area). Empty
-          area lets clicks pass through; the two groups re-enable pointer events. */}
-      <div className="pointer-events-none fixed inset-x-0 top-4 z-40 mx-auto flex max-w-[calc(var(--sheet-max)+2*var(--page-pad))] items-start justify-between px-[var(--page-pad)]">
+    <div className="relative min-h-dvh [--page-pad:1rem] [--sheet-max:820px] max-[700px]:[--page-pad:0.75rem]">
+      {/* Top bar: scrolls with the page (absolute, not fixed) so Publish never
+          covers the text once you scroll down. Its inner edges align with the
+          centered sheet (same max-width + horizontal padding as the sheet area).
+          Empty area lets clicks pass through; the two groups re-enable pointer
+          events. */}
+      <div className="pointer-events-none absolute inset-x-0 top-4 z-40 mx-auto flex max-w-[calc(var(--sheet-max)+2*var(--page-pad))] items-start justify-between px-[var(--page-pad)]">
         <div className="pointer-events-auto relative" ref={toolsRef}>
           <button
             type="button"
