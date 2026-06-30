@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Editor, type EditorHandle } from './components/Editor'
 import { destinations, type Destination } from './destinations'
-import { GearIcon, MoreIcon, LoadIcon, ImageIcon, CoinIcon } from './destinations/icons'
+import { GearIcon, MoreIcon, LoadIcon, ImageIcon, FeedbackIcon } from './destinations/icons'
 import { renderTemplate, templateVars } from './lib/template'
 import { fieldLoc, findField, readField } from './lib/fields'
 import { useDismiss } from './lib/useDismiss'
@@ -204,11 +204,11 @@ function App() {
               </MenuItem>
               <MenuDivider />
               <MenuItem
-                icon={CoinIcon}
+                icon={FeedbackIcon}
                 href="https://bodhi.wtf/token/0xD6347200EEdB3f64bBdd2C363894dd043a24a488"
                 onClick={() => setToolsOpen(false)}
               >
-                $INPUT
+                Feedback
               </MenuItem>
             </Menu>
           )}

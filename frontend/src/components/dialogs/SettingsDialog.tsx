@@ -127,7 +127,7 @@ export function SettingsDialog({
 
         <a
           className="text-[0.8rem] text-muted no-underline hover:text-text hover:underline"
-          href="https://github.com/timqian/inputpub/issues/new?title=Suggest%20a%20new%20destination&labels=destination"
+          href="https://bodhi.wtf/token/0xD6347200EEdB3f64bBdd2C363894dd043a24a488"
           target="_blank"
           rel="noreferrer"
         >
