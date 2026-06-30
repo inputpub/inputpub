@@ -23,8 +23,8 @@ const FILTERS: Row[] = [
     desc: 'Markdown → readable plain text. Strips styling markers but keeps text, line breaks, and link URLs. For targets that don’t render Markdown (X, email).',
   },
   {
-    name: 'html',
-    desc: 'Markdown → formatted HTML with inline styles. Copies as rich text, so it pastes already formatted into editors like WeChat. Images keep their URLs and are re-hosted on paste.',
+    name: 'mp-html',
+    desc: 'Markdown → HTML tailored for WeChat’s 公众号 editor: inline styles (so it pastes already formatted), outbound links turned into numbered footnotes, and images kept as URLs that the editor re-hosts on paste.',
   },
   { name: 'no-title', desc: 'Drops the first “# ” heading, so the title isn’t repeated in the body.' },
   { name: 'no-images', desc: 'Removes ![alt](url) image syntax, leaving the surrounding text.' },
@@ -33,7 +33,7 @@ const FILTERS: Row[] = [
 
 const EXAMPLES: { template: string; desc: string }[] = [
   { template: '{{ body }}', desc: 'The note as-is. The default for most targets.' },
-  { template: '{{ body | html }}', desc: 'Rich, formatted content — used for WeChat.' },
+  { template: '{{ body | mp-html }}', desc: 'Formatted content for WeChat’s 公众号 editor.' },
   { template: '{{ body | plain }}', desc: 'Plain text — used for X and email bodies.' },
   { template: '{{ body | no-title }}', desc: 'The body with its leading heading removed.' },
   {

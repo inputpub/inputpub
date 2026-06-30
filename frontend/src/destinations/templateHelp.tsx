@@ -6,7 +6,7 @@ export const templateHint: ReactNode = (
   <>
     <code>{'{{title}}'}</code> <code>{'{{date}}'}</code> <code>{'{{datetime}}'}</code>{' '}
     <code>{'{{body}}'}</code> <code>{'{{filename}}'}</code> · filters <code>| plain</code>{' '}
-    <code>| html</code> <code>| no-title</code> <code>| no-images</code> <code>| quote</code> ·
+    <code>| mp-html</code> <code>| no-title</code> <code>| no-images</code> <code>| quote</code> ·
     empty uses the default ·{' '}
     <a href="/template" target="_blank" rel="noreferrer">
       docs

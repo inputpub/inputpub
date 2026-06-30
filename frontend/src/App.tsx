@@ -27,6 +27,10 @@ import { ImageUploadDialog } from './components/dialogs/ImageUploadDialog'
  *  "copied" toast before the new tab takes focus. */
 const CLIPBOARD_OPEN_DELAY = 2000
 
+/** Rough mobile check — used only to tailor the copy hand-off (where there's no
+ *  usable web admin / app deep link), not for anything security-sensitive. */
+const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+
 function App() {
   const editorRef = useRef<EditorHandle>(null)
   const persist = useMemo(() => debounce(saveDraft, 400), [])
@@ -121,7 +125,7 @@ function App() {
         const text = ctxFor(dest, input, markdown).slot('content')
         let copied = false
         try {
-          if (dest.clipboard.format === 'html') {
+          if (dest.clipboard.format === 'mp-html') {
             // Rich-text paste: HTML as text/html, raw Markdown as the fallback.
             await navigator.clipboard.write([
               new ClipboardItem({
@@ -135,6 +139,19 @@ function App() {
           copied = true
         } catch {
           // clipboard may be unavailable; still send the user over
+        }
+        // On mobile, WeChat's web admin is unusable and there's no public way
+        // to deep-link the "订阅号助手" app — so just guide the user to open it
+        // and paste, rather than navigating to a dead-end web page.
+        if (isMobile && dest.clipboard.format === 'mp-html') {
+          setStatus({
+            kind: 'ok',
+            big: true,
+            text: copied
+              ? 'Copied. Open the WeChat “订阅号助手” app and paste into a new article.'
+              : 'Copy your text, then open the WeChat “订阅号助手” app and paste into a new article.',
+          })
+          return
         }
         setStatus({
           kind: 'ok',

@@ -48,12 +48,12 @@ export interface Destination {
    * navigates to this URL after a short delay so the user can read the toast
    * first and paste once they arrive. Such destinations don't need `send`.
    *
-   * `format: 'html'` copies the rendered template as rich text (the `text/html`
-   * clipboard flavor, with the raw Markdown as the `text/plain` fallback), so a
-   * rich-text editor like WeChat's pastes it already formatted. Defaults to
-   * plain text.
+   * `format: 'mp-html'` copies the rendered template as rich text (the
+   * `text/html` clipboard flavor, with the raw Markdown as the `text/plain`
+   * fallback), so WeChat's (公众号) editor pastes it already formatted. Defaults
+   * to plain text.
    */
-  clipboard?: { url: string; format?: 'markdown' | 'html' }
+  clipboard?: { url: string; format?: 'markdown' | 'mp-html' }
   /**
    * Perform the publish/send for the given markdown.
    * Throw to signal failure — the UI surfaces the message.

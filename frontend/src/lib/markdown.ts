@@ -97,7 +97,6 @@ const HTML_STYLES: Record<string, string> = {
   ul: 'margin:16px 0;padding-left:24px',
   ol: 'margin:16px 0;padding-left:24px',
   li: 'font-size:16px;line-height:1.75;margin:4px 0',
-  a: 'color:#576b95;text-decoration:none',
   img: 'max-width:100%;height:auto',
   table: 'border-collapse:collapse;width:100%;margin:16px 0;font-size:14px',
   th: 'border:1px solid #ddd;padding:6px 12px;background:#f7f7f7;text-align:left',
@@ -110,19 +109,53 @@ const PRE_STYLE =
 const PRE_CODE_STYLE = 'font-family:Menlo,Consolas,monospace;background:none;padding:0'
 const INLINE_CODE_STYLE =
   'font-family:Menlo,Consolas,monospace;background:#f6f8fa;border-radius:3px;padding:2px 4px;font-size:90%'
+const LINK_TEXT_STYLE = 'color:#576b95'
+const SUP_STYLE = 'color:#576b95;font-size:75%'
+const REF_TITLE_STYLE = 'font-size:15px;font-weight:700;margin:24px 0 8px;color:#333'
+const REF_ITEM_STYLE = 'font-size:13px;line-height:1.7;margin:4px 0;color:#888;word-break:break-all'
 
 /**
- * Render Markdown to HTML with every relevant tag carrying inline styles, ready
- * to drop on the clipboard as `text/html` and paste into a rich-text editor
- * (e.g. a WeChat article). Images keep their original `<img src>` URLs — the
- * editor fetches and re-hosts them on paste — so uploading to an image host
- * first is what makes them "land" in the published post.
+ * WeChat strips most outbound links — a pasted `<a href>` to anything but a
+ * WeChat article becomes dead text, so the URL is lost. Mirror what dedicated
+ * "Markdown → WeChat" tools do: replace each such link with a superscript
+ * marker and collect the URLs, to be listed at the foot of the article. Links
+ * to WeChat's own articles stay clickable. Operates on micromark's `<a>` output
+ * before inline styling.
  */
-export function markdownToInlineHtml(markdown: string): string {
-  const html = micromark(markdown, {
+function footnoteLinks(html: string): { html: string; refs: string[] } {
+  const refs: string[] = []
+  const out = html.replace(
+    /<a\s+href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/g,
+    (_m, href: string, text: string) => {
+      // WeChat keeps links to its own articles working — leave them clickable.
+      if (/^https?:\/\/mp\.weixin\.qq\.com\//i.test(href)) {
+        return `<a href="${href}" style="${LINK_TEXT_STYLE}">${text}</a>`
+      }
+      // A bare URL already shows its address as text — no footnote needed.
+      if (text === href) return `<span style="${LINK_TEXT_STYLE}">${text}</span>`
+      refs.push(href)
+      return `<span style="${LINK_TEXT_STYLE}">${text}</span><sup style="${SUP_STYLE}">[${refs.length}]</sup>`
+    },
+  )
+  return { html: out, refs }
+}
+
+/**
+ * Render Markdown to "MP HTML": HTML tailored for WeChat's Official Accounts
+ * (公众号 / mp.weixin.qq.com) editor rather than the generic web. Every tag
+ * carries inline styles (the editor drops <style> and classes), outbound links
+ * become numbered footnotes (see footnoteLinks, since WeChat won't keep them
+ * live), and images keep their original `<img src>` URLs — the editor fetches
+ * and re-hosts them on paste, so uploading to an image host first is what makes
+ * them "land" in the published post. Drop the result on the clipboard as
+ * `text/html` and paste it into a new article.
+ */
+export function markdownToMpHtml(markdown: string): string {
+  const rendered = micromark(markdown, {
     extensions: [gfm()],
     htmlExtensions: [gfmHtml()],
   })
+  const { html, refs } = footnoteLinks(rendered)
   let out = html
     // Code blocks first: <pre><code class="language-x"> → styled pair, so the
     // bare-<code> pass below only catches inline code.
@@ -134,6 +167,12 @@ export function markdownToInlineHtml(markdown: string): string {
       new RegExp(`<${tag}(\\s|>|/)`, 'g'),
       (_m, after: string) => `<${tag} style="${style}"${after === '>' ? '>' : ' '}`,
     )
+  }
+  if (refs.length) {
+    const items = refs
+      .map((url, i) => `<p style="${REF_ITEM_STYLE}">[${i + 1}] ${url}</p>`)
+      .join('')
+    out += `<hr style="${HTML_STYLES.hr}"/><p style="${REF_TITLE_STYLE}">引用链接</p>${items}`
   }
   return out
 }
