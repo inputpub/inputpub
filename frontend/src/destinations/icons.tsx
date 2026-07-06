@@ -225,6 +225,41 @@ export const EditIcon: ReactNode = lineIcon(
 export const ChevronRightIcon: ReactNode = lineIcon(<path d="M9 6l6 6-6 6" />)
 export const ChevronLeftIcon: ReactNode = lineIcon(<path d="M15 6l-6 6 6 6" />)
 
+/* Vault — a folder. */
+export const FolderIcon: ReactNode = lineIcon(
+  <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,
+)
+
+/* A vault file row. */
+export const DocumentIcon: ReactNode = lineIcon(
+  <>
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <polyline points="14 2 14 8 20 8" />
+  </>,
+)
+
+/* New file. */
+export const PlusIcon: ReactNode = lineIcon(
+  <>
+    <line x1="12" y1="5" x2="12" y2="19" />
+    <line x1="5" y1="12" x2="19" y2="12" />
+  </>,
+)
+
+/* Checkmark — marks the active item in a list (e.g. the connected vault). */
+export const CheckIcon: ReactNode = lineIcon(<path d="M20 6 9 17l-5-5" />)
+
+/* Delete file. */
+export const TrashIcon: ReactNode = lineIcon(
+  <>
+    <polyline points="3 6 5 6 21 6" />
+    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+    <path d="M10 11v6" />
+    <path d="M14 11v6" />
+    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+  </>,
+)
+
 // ---- Image-host icons ----
 export const SparklesIcon = solid('M12 2l2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z')
 

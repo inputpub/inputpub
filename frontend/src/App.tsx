@@ -14,6 +14,7 @@ import {
   EditIcon,
   ChevronRightIcon,
   ChevronLeftIcon,
+  FolderIcon,
 } from './destinations/icons'
 import { applyThemePref, getThemePref, nextThemePref, type ThemePref } from './lib/theme'
 import { renderTemplate, templateVars } from './lib/template'
@@ -28,6 +29,17 @@ import {
   setConfig,
   setEnabled,
 } from './lib/storage'
+import {
+  activeVaultBatchesWrites,
+  flushPendingVaultSave,
+  getVaultSaveError,
+  getVaultSaveState,
+  onVaultSaveStateChange,
+  openVaultFile,
+  reopenLastVaultFile,
+  resetVaultSaveState,
+  stageVaultEdit,
+} from './lib/vault'
 import { Menu, MenuDivider, MenuItem } from './components/Menu'
 import { Toast, type ToastStatus } from './components/Toast'
 import { LoadDialog } from './components/dialogs/LoadDialog'
@@ -38,6 +50,8 @@ import { PromptDialog } from './components/dialogs/PromptDialog'
 import { SettingsDialog } from './components/dialogs/SettingsDialog'
 import { ImageHostDialog } from './components/dialogs/ImageHostDialog'
 import { ImageUploadDialog } from './components/dialogs/ImageUploadDialog'
+import { VaultSidebar } from './components/VaultSidebar'
+import type { VaultSaveState } from './lib/vault'
 
 /** Delay before a clipboard destination opens the target, so the user reads the
  *  "copied" toast before the new tab takes focus. */
@@ -49,9 +63,9 @@ const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
 
 function App() {
   const editorRef = useRef<EditorHandle>(null)
-  const persist = useMemo(() => debounce(saveDraft, 400), [])
+  const persistDraft = useMemo(() => debounce(saveDraft, 400), [])
   // The editor seeds its content from this once per mount; bump editorKey to
-  // remount it with fresh content (used by "Load content").
+  // remount it with fresh content (used by "Load content" and opening a vault file).
   const [seed, setSeed] = useState<string>(() => loadDraft())
   const [editorKey, setEditorKey] = useState(0)
 
@@ -71,6 +85,13 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [configFor, setConfigFor] = useState<Destination | null>(null)
   const [promptFor, setPromptFor] = useState<Destination | null>(null)
+  // The vault sidebar is closed by default; opening it shows either the
+  // "connect a vault" form or the file tree, depending on connection state.
+  const [vaultSidebarOpen, setVaultSidebarOpen] = useState(false)
+  // The path of the vault file currently loaded into the editor, if any —
+  // when set, edits save to the vault instead of the local draft.
+  const [vaultPath, setVaultPath] = useState<string | undefined>(undefined)
+  const [vaultSaveState, setVaultSaveState] = useState<VaultSaveState>('idle')
   const [enabledMap, setEnabledMap] = useState<Record<string, boolean>>(() => {
     const m: Record<string, boolean> = {}
     for (const d of destinations) m[d.id] = getEnabled(d.id) ?? d.defaultEnabled ?? true
@@ -88,11 +109,21 @@ function App() {
   useDismiss(publishRef, closeMenu, menuOpen)
   useDismiss(toolsRef, closeTools, toolsOpen)
 
-  // Replace the editor's content (remount with a fresh seed) and persist it.
+  // Replace the editor's content (remount with a fresh seed) and persist it —
+  // to the open vault file if one is active, otherwise the local draft.
+  // Loading content is itself an explicit action, so it flushes immediately
+  // rather than waiting on the vault's usual save-batching.
   function loadContent(text: string) {
     setSeed(text)
     setEditorKey((k) => k + 1)
-    saveDraft(text)
+    if (vaultPath) {
+      stageVaultEdit(text)
+      void flushPendingVaultSave().catch((err) => {
+        setStatus({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+      })
+    } else {
+      saveDraft(text)
+    }
   }
 
   // Remount the editor while keeping its current content — used when editor-time
@@ -113,6 +144,132 @@ function App() {
     const t = setTimeout(() => setStatus(null), 3500)
     return () => clearTimeout(t)
   }, [status])
+
+  // On first mount, reopen whatever vault file was left open last session.
+  useEffect(() => {
+    reopenLastVaultFile().then((opened) => {
+      if (!opened) return
+      setSeed(opened.content)
+      setEditorKey((k) => k + 1)
+      setVaultPath(opened.path)
+      setVaultSidebarOpen(true)
+    })
+  }, [])
+
+  // Reflect lib/vault's save state (updated outside React, by the staging/
+  // flush machinery) into the UI, and surface flush failures as a toast.
+  useEffect(() => {
+    return onVaultSaveStateChange((state) => {
+      setVaultSaveState(state)
+      if (state === 'error') {
+        setStatus({ kind: 'error', text: getVaultSaveError() ?? "Couldn't save the file" })
+      }
+    })
+  }, [])
+
+  // Cmd/Ctrl+S: there's no Save button (edits already save themselves), but
+  // the browser doesn't know that — left alone it pops up its own native
+  // "Save Page As" dialog. Block that, and treat the shortcut as an explicit
+  // checkpoint so a batched (e.g. GitHub) vault flushes right away instead of
+  // waiting for its idle timeout.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        void flushPendingVaultSave()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
+  // Flush a staged vault edit on natural checkpoints — losing focus or the
+  // tab going hidden — so a batched (e.g. GitHub) save isn't only waiting on
+  // its idle timeout. (Switching files/vaults already flushes internally,
+  // in lib/vault.ts, before it changes what's active.)
+  useEffect(() => {
+    const flush = () => void flushPendingVaultSave()
+    const onVisibility = () => {
+      if (document.hidden) flush()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('blur', flush)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('blur', flush)
+    }
+  }, [])
+
+  // Closing/reloading the tab is different from the checkpoints above: the
+  // page won't stay open long enough to reliably wait for a flush to finish.
+  // For a batched (e.g. GitHub) vault with a save still pending, warn via the
+  // browser's native "leave site?" prompt instead — for a local folder, a
+  // write is already near-instant, so there's essentially never anything to
+  // lose and the warning would just be noise.
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      void flushPendingVaultSave()
+      if (activeVaultBatchesWrites() && getVaultSaveState() !== 'idle' && getVaultSaveState() !== 'saved') {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [])
+
+  // Stage every edit; lib/vault.ts decides when to actually save (batched
+  // for providers like GitHub, near-instant for a local folder).
+  const onEditorChange = useCallback(
+    (markdown: string) => {
+      if (vaultPath) {
+        stageVaultEdit(markdown)
+      } else {
+        persistDraft(markdown)
+      }
+    },
+    [vaultPath, persistDraft],
+  )
+
+  // Open a file from the vault sidebar into the editor. (openVaultFile
+  // already flushes any pending edit on the previously open file first.)
+  async function openVaultPath(path: string) {
+    try {
+      const content = await openVaultFile(path)
+      setSeed(content)
+      setEditorKey((k) => k + 1)
+      setVaultPath(path)
+      resetVaultSaveState()
+    } catch (err) {
+      setStatus({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    }
+  }
+
+  // A file was just created in the sidebar — it's already open (and empty).
+  function onVaultFileCreated(path: string) {
+    setSeed('')
+    setEditorKey((k) => k + 1)
+    setVaultPath(path)
+    resetVaultSaveState()
+  }
+
+  // A file was deleted in the sidebar — if it was open, fall back to the draft.
+  function onVaultFileDeleted(path: string) {
+    if (vaultPath !== path) return
+    setSeed(loadDraft())
+    setEditorKey((k) => k + 1)
+    setVaultPath(undefined)
+  }
+
+  // The active vault changed (connected, switched, reconfigured, or
+  // disconnected) from the sidebar — if a vault file was open, it may no
+  // longer belong to the active vault, so fall back to the local draft.
+  function onVaultChanged() {
+    if (!vaultPath) return
+    setSeed(loadDraft())
+    setEditorKey((k) => k + 1)
+    setVaultPath(undefined)
+  }
 
   const ctxFor = (dest: Destination, input: Record<string, string>, markdown: string) => {
     const get = (key: string) => {
@@ -224,168 +381,220 @@ function App() {
 
   return (
     // --sheet-max / --page-pad are the single source of truth for the sheet
-    // width + horizontal gutter; both the sheet and the fixed top bar derive
-    // their edges from these, so Publish always lines up with the sheet's right
-    // edge at any width.
+    // width + horizontal gutter; the sheet, the fixed top bar, and the floating
+    // vault sidebar all derive their position from these, so everything lines
+    // up with the sheet's edges at any width.
     <div className="relative min-h-dvh [--page-pad:1rem] [--sheet-max:820px] max-[700px]:[--page-pad:0.75rem]">
+      {vaultSidebarOpen && (
+        <VaultSidebar
+          currentPath={vaultPath}
+          onOpen={(path) => void openVaultPath(path)}
+          onCreated={onVaultFileCreated}
+          onDeleted={onVaultFileDeleted}
+          onVaultChanged={onVaultChanged}
+          onError={(text) => setStatus({ kind: 'error', text })}
+        />
+      )}
       {/* Top bar: scrolls with the page (absolute, not fixed) so Publish never
           covers the text once you scroll down. Its inner edges align with the
           centered sheet (same max-width + horizontal padding as the sheet area).
           Empty area lets clicks pass through; the two groups re-enable pointer
           events. */}
       <div className="pointer-events-none absolute inset-x-0 top-4 z-40 mx-auto flex max-w-[calc(var(--sheet-max)+2*var(--page-pad))] items-start justify-between px-[var(--page-pad)]">
-        <div className="pointer-events-auto relative" ref={toolsRef}>
+        <div className="pointer-events-auto relative">
           <button
             type="button"
-            className="inline-flex cursor-pointer items-center justify-center rounded-md border border-transparent px-2 py-[0.3rem] text-muted opacity-60 transition duration-150 hover:bg-hover hover:text-text hover:opacity-100"
-            aria-haspopup="menu"
-            aria-expanded={toolsOpen}
-            aria-label="More"
-            onClick={() => setToolsOpen((o) => !o)}
+            className={`inline-flex cursor-pointer items-center justify-center rounded-md border border-transparent px-2 py-[0.3rem] text-muted opacity-60 transition duration-150 hover:bg-hover hover:text-text hover:opacity-100 ${vaultSidebarOpen ? 'bg-hover text-text opacity-100' : ''}`}
+            aria-pressed={vaultSidebarOpen}
+            aria-label="Toggle vault"
+            title="Vault"
+            onClick={() => setVaultSidebarOpen((o) => !o)}
           >
             <span className="inline-flex text-[1.15rem] leading-none [&_svg]:block [&_svg]:size-[1em]">
-              {MoreIcon}
+              {FolderIcon}
             </span>
           </button>
-          {toolsOpen && (
-            <Menu align="left">
-              {toolsView === 'main' ? (
-                <>
-                  <MenuItem
-                    icon={LoadIcon}
-                    onClick={() => {
-                      closeTools()
-                      setLoadOpen(true)
-                    }}
-                  >
-                    Load content
-                  </MenuItem>
-                  <MenuItem
-                    icon={
-                      theme === 'system' ? MonitorIcon : theme === 'light' ? SunIcon : MoonIcon
-                    }
-                    title="Switch color theme"
-                    onClick={() => {
-                      const next = nextThemePref(theme)
-                      setTheme(next)
-                      applyThemePref(next)
-                    }}
-                  >
-                    Theme: {theme === 'system' ? 'System' : theme === 'light' ? 'Light' : 'Dark'}
-                  </MenuItem>
-                  <MenuItem
-                    icon={GearIcon}
-                    trailing={ChevronRightIcon}
-                    onClick={() => setToolsView('settings')}
-                  >
-                    Settings
-                  </MenuItem>
-                  <MenuDivider />
-                  <MenuItem
-                    icon={FeedbackIcon}
-                    href="https://bodhi.wtf/token/0xD6347200EEdB3f64bBdd2C363894dd043a24a488"
-                    onClick={() => closeTools()}
-                  >
-                    Feedback
-                  </MenuItem>
-                </>
-              ) : (
-                <>
-                  <MenuItem icon={ChevronLeftIcon} onClick={() => setToolsView('main')}>
-                    Back
-                  </MenuItem>
-                  <MenuDivider />
-                  <MenuItem
-                    icon={ImageIcon}
-                    onClick={() => {
-                      closeTools()
-                      setImageHostOpen(true)
-                    }}
-                  >
-                    Image Host
-                  </MenuItem>
-                  <MenuItem
-                    icon={SparklesIcon}
-                    onClick={() => {
-                      closeTools()
-                      setAiProviderOpen(true)
-                    }}
-                  >
-                    AI Provider
-                  </MenuItem>
-                  <MenuItem
-                    icon={EditIcon}
-                    onClick={() => {
-                      closeTools()
-                      setAiPromptsOpen(true)
-                    }}
-                  >
-                    AI Prompts
-                  </MenuItem>
-                </>
-              )}
-            </Menu>
-          )}
         </div>
 
-        <div className="pointer-events-auto relative" ref={publishRef}>
-          <button
-            type="button"
-            className="group inline-flex cursor-pointer items-center gap-[0.3rem] rounded-md border border-transparent py-[0.3rem] pl-[0.6rem] pr-[0.4rem] font-medium text-muted opacity-70 transition duration-150 enabled:hover:bg-hover enabled:hover:text-text enabled:hover:opacity-100 enabled:active:translate-y-px disabled:cursor-default disabled:opacity-45"
-            disabled={busy !== null}
-            aria-haspopup="menu"
-            aria-expanded={menuOpen}
-            onClick={() => setMenuOpen((o) => !o)}
-          >
-            <span>{busy ? 'Publishing…' : 'Publish'}</span>
-            <svg
-              className="shrink-0 opacity-70 transition-transform duration-150 group-aria-expanded:rotate-180"
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
+        <div className="pointer-events-auto flex items-start gap-2">
+          <div className="relative" ref={toolsRef}>
+            <button
+              type="button"
+              className="inline-flex cursor-pointer items-center justify-center rounded-md border border-transparent px-2 py-[0.3rem] text-muted opacity-60 transition duration-150 hover:bg-hover hover:text-text hover:opacity-100"
+              aria-haspopup="menu"
+              aria-expanded={toolsOpen}
+              aria-label="More"
+              onClick={() => setToolsOpen((o) => !o)}
             >
-              <path d="M6 9l6 6 6-6" />
-            </svg>
-          </button>
-          {menuOpen && (
-            <Menu>
-              {destinations
-                .filter((dest) => enabledMap[dest.id])
-                .map((dest) => (
-                  <MenuItem key={dest.id} icon={dest.icon} title={dest.hint} onClick={() => pick(dest)}>
-                    {dest.name}
-                  </MenuItem>
-                ))}
-              <MenuDivider />
-              <MenuItem
-                icon={GearIcon}
-                onClick={() => {
-                  setMenuOpen(false)
-                  setSettingsOpen(true)
-                }}
+              <span className="inline-flex text-[1.15rem] leading-none [&_svg]:block [&_svg]:size-[1em]">
+                {MoreIcon}
+              </span>
+            </button>
+            {toolsOpen && (
+              <Menu>
+                {toolsView === 'main' ? (
+                  <>
+                    <MenuItem
+                      icon={LoadIcon}
+                      onClick={() => {
+                        closeTools()
+                        setLoadOpen(true)
+                      }}
+                    >
+                      Load content
+                    </MenuItem>
+                    <MenuItem
+                      icon={
+                        theme === 'system' ? MonitorIcon : theme === 'light' ? SunIcon : MoonIcon
+                      }
+                      title="Switch color theme"
+                      onClick={() => {
+                        const next = nextThemePref(theme)
+                        setTheme(next)
+                        applyThemePref(next)
+                      }}
+                    >
+                      Theme: {theme === 'system' ? 'System' : theme === 'light' ? 'Light' : 'Dark'}
+                    </MenuItem>
+                    <MenuItem
+                      icon={GearIcon}
+                      trailing={ChevronRightIcon}
+                      onClick={() => setToolsView('settings')}
+                    >
+                      Settings
+                    </MenuItem>
+                    <MenuDivider />
+                    <MenuItem
+                      icon={FeedbackIcon}
+                      href="https://bodhi.wtf/token/0xD6347200EEdB3f64bBdd2C363894dd043a24a488"
+                      onClick={() => closeTools()}
+                    >
+                      Feedback
+                    </MenuItem>
+                  </>
+                ) : (
+                  <>
+                    <MenuItem icon={ChevronLeftIcon} onClick={() => setToolsView('main')}>
+                      Back
+                    </MenuItem>
+                    <MenuDivider />
+                    <MenuItem
+                      icon={ImageIcon}
+                      onClick={() => {
+                        closeTools()
+                        setImageHostOpen(true)
+                      }}
+                    >
+                      Image Host
+                    </MenuItem>
+                    <MenuItem
+                      icon={SparklesIcon}
+                      onClick={() => {
+                        closeTools()
+                        setAiProviderOpen(true)
+                      }}
+                    >
+                      AI Provider
+                    </MenuItem>
+                    <MenuItem
+                      icon={EditIcon}
+                      onClick={() => {
+                        closeTools()
+                        setAiPromptsOpen(true)
+                      }}
+                    >
+                      AI Prompts
+                    </MenuItem>
+                  </>
+                )}
+              </Menu>
+            )}
+          </div>
+
+          <div className="relative" ref={publishRef}>
+            <button
+              type="button"
+              className="group inline-flex cursor-pointer items-center gap-[0.3rem] rounded-md border border-transparent py-[0.3rem] pl-[0.6rem] pr-[0.4rem] font-medium leading-none text-muted opacity-70 transition duration-150 enabled:hover:bg-hover enabled:hover:text-text enabled:hover:opacity-100 enabled:active:translate-y-px disabled:cursor-default disabled:opacity-45"
+              disabled={busy !== null}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((o) => !o)}
+            >
+              <span>{busy ? 'Publishing…' : 'Publish'}</span>
+              <svg
+                className="shrink-0 opacity-70 transition-transform duration-150 group-aria-expanded:rotate-180"
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
               >
-                Customize
-              </MenuItem>
-            </Menu>
-          )}
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
+            {menuOpen && (
+              <Menu>
+                {destinations
+                  .filter((dest) => enabledMap[dest.id])
+                  .map((dest) => (
+                    <MenuItem key={dest.id} icon={dest.icon} title={dest.hint} onClick={() => pick(dest)}>
+                      {dest.name}
+                    </MenuItem>
+                  ))}
+                <MenuDivider />
+                <MenuItem
+                  icon={GearIcon}
+                  onClick={() => {
+                    setMenuOpen(false)
+                    setSettingsOpen(true)
+                  }}
+                >
+                  Customize
+                </MenuItem>
+              </Menu>
+            )}
+          </div>
         </div>
       </div>
 
       {/* A4-ish sheet: runs flush to the bottom of the window (no bottom gap,
           squared bottom corners), then grows with content. */}
       <main className="flex min-h-dvh justify-center bg-backdrop px-[var(--page-pad)] pt-16">
-        <div className="flex h-max min-h-[calc(100dvh-4rem)] w-full max-w-[var(--sheet-max)] rounded-t-lg border-[0.5px] border-edge bg-paper px-[92px] py-12 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.06)] max-[700px]:px-5 max-[700px]:pb-8 max-[700px]:pt-7">
+        <div className="flex h-max min-h-[calc(100dvh-4rem)] w-full max-w-[var(--sheet-max)] flex-col border-[0.5px] shadow-md border-edge bg-paper px-[85px] py-12  max-[700px]:px-5 max-[700px]:pb-8 max-[700px]:pt-7">
+          {vaultPath && (
+            <div className="mb-3 flex items-center gap-2 text-[0.78rem] text-muted">
+              <span className="truncate">{vaultPath}</span>
+              {/* A local-folder save is an instant disk write with nothing
+                  meaningful to report — only batched (e.g. GitHub) vaults,
+                  where a save can sit staged for a while, need this. */}
+              {activeVaultBatchesWrites() &&
+                (vaultSaveState === 'dirty' ? (
+                  <button
+                    type="button"
+                    className="group -my-1 -mr-1 shrink-0 cursor-pointer rounded px-1 py-1 opacity-70 hover:bg-hover hover:text-text hover:opacity-100"
+                    onClick={() => void flushPendingVaultSave()}
+                  >
+                    <span className="group-hover:hidden">Unsaved changes</span>
+                    <span className="hidden group-hover:inline">Save now</span>
+                  </button>
+                ) : (
+                  <span className="shrink-0 opacity-70">
+                    {vaultSaveState === 'saving' && 'Saving…'}
+                    {vaultSaveState === 'saved' && 'Saved'}
+                    {vaultSaveState === 'error' && 'Save failed'}
+                  </span>
+                ))}
+            </div>
+          )}
           <Editor
             key={editorKey}
             ref={editorRef}
             defaultValue={seed}
-            onChange={persist}
+            onChange={onEditorChange}
             onImageUploadUnconfigured={() => setImageChoiceOpen(true)}
             onImageUploadError={(text) => setStatus({ kind: 'error', text })}
             onAiUnconfigured={() => setAiProviderOpen(true)}

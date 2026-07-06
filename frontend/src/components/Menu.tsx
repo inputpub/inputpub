@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 // item styling. Dismissal is handled by the caller via useDismiss.
 
 const menuCls =
-  'absolute top-[calc(100%+0.5rem)] flex min-w-[184px] flex-col gap-[0.15rem] rounded-lg border border-line bg-surface p-[0.3rem] shadow-[0_4px_20px_rgba(0,0,0,0.12)]'
+  'absolute z-20 top-[calc(100%+0.5rem)] flex min-w-[184px] flex-col gap-[0.15rem] rounded-lg border border-line bg-surface p-[0.3rem] shadow-[0_4px_20px_rgba(0,0,0,0.12)]'
 const itemCls =
   'flex cursor-pointer items-center gap-[0.6rem] rounded-lg px-[0.7rem] py-[0.55rem] text-left hover:bg-hover'
 const itemIconCls =
