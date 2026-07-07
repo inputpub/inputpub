@@ -1,7 +1,6 @@
 import type { VaultContext, VaultEntry, VaultProvider } from './types'
 import { TEXT_EXT, VaultConflictError } from './types'
 import { GitHubIcon } from '../destinations/icons'
-import { deriveTitle } from '../lib/title'
 
 /** Encode a UTF-8 string to base64 (btoa alone breaks on non-Latin1, e.g. CJK). */
 function toBase64(text: string): string {
@@ -96,7 +95,7 @@ export const githubVault: VaultProvider = {
   name: 'GitHub',
   icon: GitHubIcon,
   blurb: 'Store your files in a GitHub repository — works on any device, needs a free GitHub account.',
-  batchWrites: true,
+  batchWrites: { defaultDelaySeconds: 60, delayConfigKey: 'autosaveSeconds' },
   config: [
     {
       key: 'token',
@@ -151,12 +150,12 @@ export const githubVault: VaultProvider = {
         `Couldn't load the repo tree (${res.status})${detail ? `: ${detail.slice(0, 140)}` : ''}`,
       )
     }
-    const data = (await res.json()) as { tree?: { path: string; type: string; sha: string }[] }
+    const data = (await res.json()) as { tree?: { path: string; type: string }[] }
     const entries: VaultEntry[] = []
     for (const item of data.tree ?? []) {
       if (item.type === 'tree') entries.push({ path: item.path, type: 'dir' })
       else if (item.type === 'blob' && TEXT_EXT.test(item.path))
-        entries.push({ path: item.path, type: 'file', sha: item.sha })
+        entries.push({ path: item.path, type: 'file' })
     }
     return entries
   },
@@ -181,7 +180,7 @@ export const githubVault: VaultProvider = {
       method: 'PUT',
       headers: headers(token),
       body: JSON.stringify({
-        message: `${sha ? 'Update' : 'Add'} ${path} — ${deriveTitle(content) || 'Input Pub'}`,
+        message: `${sha ? 'Update' : 'Add'} ${path}`,
         content: toBase64(content),
         branch,
         ...(sha ? { sha } : {}),
@@ -198,9 +197,18 @@ export const githubVault: VaultProvider = {
     return { sha: data.content.sha }
   },
 
-  async deleteFile(ctx, path, sha) {
+  async deleteFile(ctx, path) {
     const { repo, token } = repoAndToken(ctx)
     const branch = await ensureRepoAndBranch(ctx, repo, token)
+    // The Contents API needs the file's *current* blob sha to delete it.
+    // Look it up here rather than making callers cache one — a cached sha
+    // goes stale the moment the file is edited, and GitHub then 409s.
+    const lookup = await fetch(contentsUrl(repo, path, branch), { headers: headers(token) })
+    if (!lookup.ok) {
+      const detail = await lookup.text().catch(() => '')
+      throw new Error(`Couldn't read the file (${lookup.status})${detail ? `: ${detail.slice(0, 140)}` : ''}`)
+    }
+    const { sha } = (await lookup.json()) as { sha?: string }
     const res = await fetch(contentsUrl(repo, path), {
       method: 'DELETE',
       headers: headers(token),

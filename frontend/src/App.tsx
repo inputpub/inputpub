@@ -109,13 +109,20 @@ function App() {
   useDismiss(publishRef, closeMenu, menuOpen)
   useDismiss(toolsRef, closeTools, toolsOpen)
 
-  // Replace the editor's content (remount with a fresh seed) and persist it —
-  // to the open vault file if one is active, otherwise the local draft.
-  // Loading content is itself an explicit action, so it flushes immediately
-  // rather than waiting on the vault's usual save-batching.
-  function loadContent(text: string) {
-    setSeed(text)
+  // Swap the editor to new content (remount with a fresh seed) and record
+  // which vault file it belongs to (undefined = the local draft).
+  function showDocument(content: string, path: string | undefined) {
+    setSeed(content)
     setEditorKey((k) => k + 1)
+    setVaultPath(path)
+  }
+
+  // Replace the editor's content and persist it — to the open vault file if
+  // one is active, otherwise the local draft. Loading content is itself an
+  // explicit action, so it flushes immediately rather than waiting on the
+  // vault's usual save-batching.
+  function loadContent(text: string) {
+    showDocument(text, vaultPath)
     if (vaultPath) {
       stageVaultEdit(text)
       void flushPendingVaultSave().catch((err) => {
@@ -129,8 +136,7 @@ function App() {
   // Remount the editor while keeping its current content — used when editor-time
   // config (e.g. the AI suggestion prompts, read once at mount) changes.
   function reloadEditor() {
-    setSeed(editorRef.current?.getMarkdown() ?? seed)
-    setEditorKey((k) => k + 1)
+    showDocument(editorRef.current?.getMarkdown() ?? seed, vaultPath)
   }
 
   function toggleEnabled(id: string, on: boolean) {
@@ -149,9 +155,7 @@ function App() {
   useEffect(() => {
     reopenLastVaultFile().then((opened) => {
       if (!opened) return
-      setSeed(opened.content)
-      setEditorKey((k) => k + 1)
-      setVaultPath(opened.path)
+      showDocument(opened.content, opened.path)
       setVaultSidebarOpen(true)
     })
   }, [])
@@ -236,9 +240,7 @@ function App() {
   async function openVaultPath(path: string) {
     try {
       const content = await openVaultFile(path)
-      setSeed(content)
-      setEditorKey((k) => k + 1)
-      setVaultPath(path)
+      showDocument(content, path)
       resetVaultSaveState()
     } catch (err) {
       setStatus({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -247,28 +249,20 @@ function App() {
 
   // A file was just created in the sidebar — it's already open (and empty).
   function onVaultFileCreated(path: string) {
-    setSeed('')
-    setEditorKey((k) => k + 1)
-    setVaultPath(path)
+    showDocument('', path)
     resetVaultSaveState()
   }
 
   // A file was deleted in the sidebar — if it was open, fall back to the draft.
   function onVaultFileDeleted(path: string) {
-    if (vaultPath !== path) return
-    setSeed(loadDraft())
-    setEditorKey((k) => k + 1)
-    setVaultPath(undefined)
+    if (vaultPath === path) showDocument(loadDraft(), undefined)
   }
 
   // The active vault changed (connected, switched, reconfigured, or
   // disconnected) from the sidebar — if a vault file was open, it may no
   // longer belong to the active vault, so fall back to the local draft.
   function onVaultChanged() {
-    if (!vaultPath) return
-    setSeed(loadDraft())
-    setEditorKey((k) => k + 1)
-    setVaultPath(undefined)
+    if (vaultPath) showDocument(loadDraft(), undefined)
   }
 
   const ctxFor = (dest: Destination, input: Record<string, string>, markdown: string) => {

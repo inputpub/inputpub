@@ -66,6 +66,7 @@ export function activeVaultInstance(): VaultInstance | undefined {
 
 export function vaultCtxFor(instanceId: string): VaultContext {
   return {
+    id: instanceId,
     getConfig: (key: string) => getConfig(vaultNs(instanceId), key),
     setConfig: (key: string, value: string) => setConfig(vaultNs(instanceId), key, value),
   }
@@ -90,10 +91,15 @@ export function activeVaultBatchesWrites(): boolean {
   return !!activeVaultInstance()?.provider.batchWrites
 }
 
+/** Flush any staged edit without surfacing failures — used before changing
+ *  what's active (switching files/vaults, disconnecting), where the failure
+ *  is already shown via the save-state subscription and shouldn't block. */
+async function flushQuietly(): Promise<void> {
+  await flushPendingVaultSave().catch(() => {})
+}
+
 export async function connectVault(instanceId: string): Promise<void> {
-  await flushPendingVaultSave().catch(() => {
-    /* already surfaced via the save-state subscription; don't block switching */
-  })
+  await flushQuietly()
   setActiveVaultId(instanceId)
 }
 
@@ -101,9 +107,7 @@ export async function connectVault(instanceId: string): Promise<void> {
  *  active one), runs the provider's teardown (if any), drops it from the
  *  saved list, and — if it was the active one — clears that too. */
 export async function removeVaultInstance(instanceId: string): Promise<void> {
-  if (getActiveVaultId() === instanceId) {
-    await flushPendingVaultSave().catch(() => {})
-  }
+  if (getActiveVaultId() === instanceId) await flushQuietly()
   const instances = getVaultInstances()
   const rec = instances.find((i) => i.id === instanceId)
   const provider = rec && vaultProviders.find((p) => p.id === rec.providerId)
@@ -146,9 +150,7 @@ export function clearOpenFile(): void {
 }
 
 export async function openVaultFile(path: string): Promise<string> {
-  await flushPendingVaultSave().catch(() => {
-    /* already surfaced via the save-state subscription; don't block switching */
-  })
+  await flushQuietly()
   const active = activeVaultInstance()
   if (!active) throw new Error('No vault connected')
   const file = await active.provider.readFile(vaultCtxFor(active.id), path)
@@ -211,15 +213,17 @@ function clearPendingEdit() {
   setSaveState('idle')
 }
 
-/** How long to wait after the last edit before auto-saving. Configurable per
- *  GitHub-like instance (`autosaveSeconds`); a short fixed delay for
- *  providers that don't batch writes, just enough to coalesce keystrokes. */
+/** How long to wait after the last edit before auto-saving: per the
+ *  provider's `batchWrites` contract (with the user's per-instance override,
+ *  if the provider declares one), or a short fixed delay for providers that
+ *  don't batch, just enough to coalesce keystrokes. */
 function pendingSaveDelayMs(): number {
   const active = activeVaultInstance()
-  if (!active?.provider.batchWrites) return 800
-  const raw = getConfig(vaultNs(active.id), 'autosaveSeconds')
+  const batch = active?.provider.batchWrites
+  if (!active || !batch) return 800
+  const raw = batch.delayConfigKey ? getConfig(vaultNs(active.id), batch.delayConfigKey) : undefined
   const seconds = raw ? parseInt(raw, 10) : NaN
-  return (Number.isFinite(seconds) && seconds > 0 ? seconds : 60) * 1000
+  return (Number.isFinite(seconds) && seconds > 0 ? seconds : batch.defaultDelaySeconds) * 1000
 }
 
 /** Stages an edit: doesn't save immediately, just marks the file dirty and
@@ -290,9 +294,7 @@ export async function saveVaultFile(content: string): Promise<void> {
 /** Creates an empty file and marks it as the open file (no read-back needed —
  *  the caller already knows the content is `''`). */
 export async function createVaultFile(path: string): Promise<void> {
-  await flushPendingVaultSave().catch(() => {
-    /* already surfaced via the save-state subscription; don't block creating */
-  })
+  await flushQuietly()
   const active = activeVaultInstance()
   if (!active) throw new Error('No vault connected')
   const { sha } = await active.provider.writeFile(vaultCtxFor(active.id), path, '')
@@ -302,9 +304,9 @@ export async function createVaultFile(path: string): Promise<void> {
   setVaultOpenFile(path)
 }
 
-export async function deleteVaultFile(path: string, sha: string): Promise<void> {
+export async function deleteVaultFile(path: string): Promise<void> {
   const active = activeVaultInstance()
   if (!active) throw new Error('No vault connected')
-  await active.provider.deleteFile(vaultCtxFor(active.id), path, sha)
+  await active.provider.deleteFile(vaultCtxFor(active.id), path)
   if (openPath === path) clearOpenFile()
 }

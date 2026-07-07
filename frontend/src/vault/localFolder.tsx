@@ -6,9 +6,9 @@ import { clearHandle, loadHandle, saveHandle } from '../lib/fsHandleStore'
 // Browses and edits files in a folder on disk via the File System Access API
 // (Chromium browsers only — no Safari/Firefox support). Unlike the GitHub
 // provider there are no config fields to fill in; "connecting" means opening
-// the native picker and remembering the chosen folder for next time.
-
-const HANDLE_KEY = 'local-folder'
+// the native picker and remembering the chosen folder for next time. The
+// handle is stored in IndexedDB keyed by the *instance* id, so several
+// folders can be connected side by side without overwriting each other.
 
 function splitPath(path: string): { dir: string; name: string } {
   const idx = path.lastIndexOf('/')
@@ -26,11 +26,11 @@ async function getDirForPath(
   return dir
 }
 
-/** Loads the remembered folder handle and confirms read/write permission.
- *  Regaining permission after a reload needs a user gesture (a click), so
- *  this only succeeds silently if the browser still considers it granted. */
-async function getRootHandle(): Promise<FileSystemDirectoryHandle> {
-  const handle = await loadHandle(HANDLE_KEY)
+/** Loads the instance's remembered folder handle and confirms read/write
+ *  permission. Regaining permission after a reload needs a user gesture (a
+ *  click), so this only succeeds silently if still considered granted. */
+async function getRootHandle(instanceId: string): Promise<FileSystemDirectoryHandle> {
+  const handle = await loadHandle(instanceId)
   if (!handle) throw new Error('No folder connected')
   const opts = { mode: 'readwrite' as const }
   if ((await handle.queryPermission(opts)) === 'granted') return handle
@@ -50,7 +50,7 @@ export const localFolderVault: VaultProvider = {
       throw new Error('Local folders need a Chromium browser (Chrome, Edge, Arc, …)')
     }
     const handle = await window.showDirectoryPicker({ mode: 'readwrite' })
-    await saveHandle(HANDLE_KEY, handle)
+    await saveHandle(ctx.id, handle)
     ctx.setConfig('name', handle.name)
   },
 
@@ -58,8 +58,8 @@ export const localFolderVault: VaultProvider = {
     return !!ctx.getConfig('name')?.trim()
   },
 
-  async disconnect() {
-    await clearHandle(HANDLE_KEY)
+  async disconnect(ctx) {
+    await clearHandle(ctx.id)
   },
 
   describe(ctx) {
@@ -71,8 +71,8 @@ export const localFolderVault: VaultProvider = {
     return ctx.getConfig('name')?.trim() || undefined
   },
 
-  async listTree() {
-    const root = await getRootHandle()
+  async listTree(ctx) {
+    const root = await getRootHandle(ctx.id)
     const entries: Awaited<ReturnType<VaultProvider['listTree']>> = []
     async function walk(dir: FileSystemDirectoryHandle, prefix: string) {
       for await (const [name, handle] of dir.entries()) {
@@ -89,16 +89,16 @@ export const localFolderVault: VaultProvider = {
     return entries
   },
 
-  async readFile(_ctx, path) {
-    const root = await getRootHandle()
+  async readFile(ctx, path) {
+    const root = await getRootHandle(ctx.id)
     const { dir, name } = splitPath(path)
     const dirHandle = await getDirForPath(root, dir, false)
     const file = await (await dirHandle.getFileHandle(name)).getFile()
     return { content: await file.text(), sha: String(file.lastModified) }
   },
 
-  async writeFile(_ctx, path, content) {
-    const root = await getRootHandle()
+  async writeFile(ctx, path, content) {
+    const root = await getRootHandle(ctx.id)
     const { dir, name } = splitPath(path)
     const dirHandle = await getDirForPath(root, dir, true)
     const fileHandle = await dirHandle.getFileHandle(name, { create: true })
@@ -109,8 +109,8 @@ export const localFolderVault: VaultProvider = {
     return { sha: String(file.lastModified) }
   },
 
-  async deleteFile(_ctx, path) {
-    const root = await getRootHandle()
+  async deleteFile(ctx, path) {
+    const root = await getRootHandle(ctx.id)
     const { dir, name } = splitPath(path)
     const dirHandle = await getDirForPath(root, dir, false)
     await dirHandle.removeEntry(name)

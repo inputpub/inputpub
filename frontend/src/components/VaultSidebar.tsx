@@ -25,7 +25,6 @@ interface TreeNode {
   name: string
   path: string
   type: 'file' | 'dir'
-  sha?: string
   children: TreeNode[]
 }
 
@@ -49,7 +48,6 @@ function buildTree(entries: VaultEntry[]): TreeNode[] {
         name: parts[i],
         path,
         type: isLeaf ? entry.type : 'dir',
-        sha: isLeaf ? entry.sha : undefined,
         children: [],
       }
       byPath.set(path, node)
@@ -308,6 +306,9 @@ export function VaultSidebar({
   const [view, setView] = useState<'browse' | 'configure'>(() =>
     isVaultConnected() ? 'browse' : 'configure',
   )
+  // Mirror of the active instance id, so the tree-reload effect below re-runs
+  // when the active vault changes — not only on a view transition.
+  const [activeId, setActiveId] = useState<string | undefined>(() => activeVaultInstance()?.id)
   // Which instance the configure form targets — a saved one (reconfiguring,
   // or switching to an unconfigured provider) or a fresh pending one (adding
   // a new vault). null = show the "choose a vault type" picker.
@@ -339,10 +340,12 @@ export function VaultSidebar({
   }
 
   useEffect(() => {
-    if (view === 'browse') refresh()
-    // Reload only when switching into the browse view; create/delete refresh explicitly.
+    if (view === 'browse' && activeId) refresh()
+    // Reload when entering the browse view or when the active vault changes;
+    // create/delete update the list directly instead (see submitCreate/
+    // handleDelete).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view])
+  }, [view, activeId])
 
   useEffect(() => {
     if (creating) newInputRef.current?.focus()
@@ -359,7 +362,10 @@ export function VaultSidebar({
       await createVaultFile(path)
       setCreating(false)
       setNewPath('')
-      refresh()
+      // Update the list from what we already know, rather than re-fetching —
+      // right after a write, some providers (e.g. GitHub) can briefly still
+      // return the pre-write tree if the API is re-read immediately.
+      setEntries((prev) => [...(prev ?? []), { path, type: 'file' }])
       onCreated(path)
     } catch (err) {
       onError(err instanceof Error ? err.message : String(err))
@@ -369,11 +375,10 @@ export function VaultSidebar({
   }
 
   async function handleDelete(node: TreeNode) {
-    if (!node.sha) return
     if (!window.confirm(`Delete ${node.path}?`)) return
     try {
-      await deleteVaultFile(node.path, node.sha)
-      refresh()
+      await deleteVaultFile(node.path)
+      setEntries((prev) => prev?.filter((e) => e.path !== node.path) ?? prev)
       onDeleted(node.path)
     } catch (err) {
       onError(err instanceof Error ? err.message : String(err))
@@ -383,6 +388,7 @@ export function VaultSidebar({
   async function disconnect() {
     await disconnectVault()
     setEntries(null)
+    setActiveId(undefined)
     setView('configure')
     // Nothing's connected anymore — back to the type picker (if there's an
     // actual choice to make) rather than lingering on the just-disconnected
@@ -393,19 +399,17 @@ export function VaultSidebar({
 
   // Picking an already-connected instance from the switcher: jump straight
   // into browsing it. (connectVault flushes any pending edit on the
-  // previously active vault first.)
+  // previously active vault first; the tree-reload effect fires off the
+  // activeId change.)
   async function selectInstance(instance: VaultInstance) {
     setSwitcherOpen(false)
     if (instance.id === activeVaultInstance()?.id) return
     await connectVault(instance.id)
     setEntries(null)
     setLoadError(null)
+    setActiveId(instance.id)
     setView('browse')
     onVaultChanged()
-    // The tree-reload effect only fires on a *transition* into 'browse' —
-    // if we were already browsing (just a different vault), it won't
-    // re-run on its own, so refresh explicitly.
-    refresh()
   }
 
   // "Add a vault" from the switcher, or the very first connection: open a
@@ -424,9 +428,10 @@ export function VaultSidebar({
   }
 
   function handleConnected() {
-    setView('browse')
     setEntries(null)
     setLoadError(null)
+    setActiveId(configTarget?.id)
+    setView('browse')
     onVaultChanged()
   }
 
