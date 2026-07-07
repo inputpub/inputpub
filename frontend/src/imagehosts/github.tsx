@@ -1,5 +1,6 @@
 import type { ImageHost } from './types'
 import { GitHubIcon } from '../destinations/icons'
+import { githubRepoTokenHint } from '../components/githubTokenHint'
 import { req, uniqueName } from './shared'
 
 /** Encode bytes to base64 in chunks (btoa needs a binary string; spreading the
@@ -24,19 +25,11 @@ export const githubHost: ImageHost = {
       key: 'token',
       label: 'GitHub Token',
       type: 'password',
-      placeholder: 'ghp_…',
+      placeholder: 'github_pat_…',
       hint: (
         <>
-          A classic token with the <b>repo</b> scope. Images are committed to a <b>public</b> repo
-          and embedded via their raw URL.{' '}
-          <a
-            href="https://github.com/settings/tokens/new?scopes=repo&description=Input%20Pub%20(images)"
-            target="_blank"
-            rel="noreferrer"
-            onClick={(e) => e.stopPropagation()}
-          >
-            Create one ↗
-          </a>
+          Images are committed to a <b>public</b> repo and embedded via their raw URL.{' '}
+          {githubRepoTokenHint}
         </>
       ),
     },

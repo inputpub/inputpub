@@ -236,10 +236,7 @@ function ConfigureForm({
         <span className={iconCls}>{provider.icon}</span>
         <span>{provider.name}</span>
       </div>
-      <p className="m-0 text-[0.78rem] text-muted">
-        Connect a store to browse, edit, and create files here. Saved only in this browser
-        (localStorage); never uploaded.
-      </p>
+      <p className="m-0 text-[0.78rem] leading-snug text-muted">{provider.connectNote}</p>
       {provider.config.map((f) => (
         <Field
           key={f.key}

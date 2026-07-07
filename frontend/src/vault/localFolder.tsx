@@ -43,6 +43,8 @@ export const localFolderVault: VaultProvider = {
   name: 'Local Folder',
   icon: FolderIcon,
   blurb: 'Store your files in a folder on this computer — no account needed. Chrome/Edge only.',
+  connectNote:
+    'Pick a folder and this becomes a plain editor for the Markdown files inside it. Files are read and saved directly on your computer — nothing is uploaded anywhere.',
   config: [],
 
   async connect(ctx) {

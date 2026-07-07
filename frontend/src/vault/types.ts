@@ -58,6 +58,11 @@ export interface VaultProvider {
   /** Plain-language one-liner shown in the "choose a vault type" picker —
    *  written for someone who doesn't know what a token or a picker API is. */
   blurb: string
+  /** Explanatory text shown above the fields in this provider's connect form.
+   *  Provider-specific on purpose — where the data lives and what "connecting"
+   *  means differs (a token in localStorage vs. editing files on disk), so a
+   *  single generic line can't be accurate for all of them. */
+  connectNote: ReactNode
   /** Fields to configure before this provider can be connected. Leave empty
    *  for providers that connect via `connect` instead (e.g. a native picker). */
   config: ConfigField[]

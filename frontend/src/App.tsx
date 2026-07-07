@@ -31,6 +31,7 @@ import {
 } from './lib/storage'
 import {
   activeVaultBatchesWrites,
+  expectReloadEcho,
   flushPendingVaultSave,
   getVaultSaveError,
   getVaultSaveState,
@@ -128,6 +129,9 @@ function App() {
       void flushPendingVaultSave().catch((err) => {
         setStatus({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
       })
+      // The remount will echo `text` back normalized — treat that as the
+      // baseline, not a fresh edit (see stageVaultEdit).
+      expectReloadEcho()
     } else {
       saveDraft(text)
     }
@@ -136,6 +140,9 @@ function App() {
   // Remount the editor while keeping its current content — used when editor-time
   // config (e.g. the AI suggestion prompts, read once at mount) changes.
   function reloadEditor() {
+    // Keeping the current content — the remount's normalized echo is a
+    // baseline, not an edit (relevant when a vault file is open).
+    if (vaultPath) expectReloadEcho()
     showDocument(editorRef.current?.getMarkdown() ?? seed, vaultPath)
   }
 

@@ -18,7 +18,8 @@ export const githubGist: Destination = {
       type: 'password',
       hint: (
         <>
-          Use a classic token with the <b>gist</b> scope.{' '}
+          Use a classic token with only the <b>gist</b> scope (fine-grained tokens can't access
+          gists yet; this scope can't touch your repositories).{' '}
           <a
             href="https://github.com/settings/tokens/new?scopes=gist&description=Input%20Pub%20(gist)"
             target="_blank"

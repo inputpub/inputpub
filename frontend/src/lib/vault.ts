@@ -136,6 +136,12 @@ export async function loadVaultTree(): Promise<VaultEntry[]> {
 let openPath: string | undefined
 let openSha: string | undefined
 let lastSavedContent: string | undefined
+// The editor normalizes Markdown when it loads a document and emits one
+// `markdownUpdated` for that round-trip — not a user edit. This makes the
+// next `stageVaultEdit` adopt that emission as the clean baseline, so opening
+// a file doesn't show "Unsaved changes" (and a later autosave doesn't commit
+// a pure-reformatting diff).
+let awaitingBaseline = false
 
 export function currentVaultFile(): string | undefined {
   return openPath
@@ -145,6 +151,7 @@ export function clearOpenFile(): void {
   openPath = undefined
   openSha = undefined
   lastSavedContent = undefined
+  awaitingBaseline = false
   clearPendingEdit()
   clearVaultOpenFile()
 }
@@ -157,8 +164,16 @@ export async function openVaultFile(path: string): Promise<string> {
   openPath = path
   openSha = file.sha
   lastSavedContent = file.content
+  awaitingBaseline = true
   setVaultOpenFile(path)
   return file.content
+}
+
+/** Programmatically replacing the editor's content (e.g. "Load content")
+ *  triggers the same normalized reload echo as opening a file — so mark the
+ *  next emission as the baseline rather than a user edit. */
+export function expectReloadEcho(): void {
+  awaitingBaseline = true
 }
 
 // --- Staged edits: for providers that batch writes (see batchWrites above),
@@ -230,6 +245,20 @@ function pendingSaveDelayMs(): number {
  *  (re)starts the auto-save timer. Call `flushPendingVaultSave` to save
  *  immediately (e.g. on a checkpoint). */
 export function stageVaultEdit(content: string): void {
+  // The editor's first emission after a (re)load is its normalized round-trip
+  // of the loaded content, not a user edit — adopt it as the clean baseline
+  // and stay idle.
+  if (awaitingBaseline) {
+    awaitingBaseline = false
+    lastSavedContent = content
+    clearPendingEdit()
+    return
+  }
+  // Edited back to exactly the saved text — nothing to commit.
+  if (content === lastSavedContent) {
+    clearPendingEdit()
+    return
+  }
   pendingContent = content
   setSaveState('dirty')
   clearIdleTimer()
@@ -301,6 +330,7 @@ export async function createVaultFile(path: string): Promise<void> {
   openPath = path
   openSha = sha
   lastSavedContent = ''
+  awaitingBaseline = true
   setVaultOpenFile(path)
 }
 

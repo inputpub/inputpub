@@ -2,6 +2,7 @@ import type { Destination } from './types'
 import { deriveTitle } from '../lib/title'
 import { GitHubIcon } from './icons'
 import { templateHint } from './templateHelp'
+import { githubRepoTokenHint } from '../components/githubTokenHint'
 
 /** Encode a UTF-8 string to base64 (btoa alone breaks on non-Latin1, e.g. CJK). */
 function toBase64(text: string): string {
@@ -26,20 +27,8 @@ export const github: Destination = {
       key: 'token',
       label: 'GitHub Token',
       type: 'password',
-      placeholder: 'ghp_…',
-      hint: (
-        <>
-          Use a classic token with the <b>repo</b> scope.{' '}
-          <a
-            href="https://github.com/settings/tokens/new?scopes=repo&description=Input%20Pub%20(repo)"
-            target="_blank"
-            rel="noreferrer"
-            onClick={(e) => e.stopPropagation()}
-          >
-            Create one ↗
-          </a>
-        </>
-      ),
+      placeholder: 'github_pat_…',
+      hint: githubRepoTokenHint,
     },
     { key: 'repo', label: 'Repository (owner/repo)', placeholder: 'timqian/notes' },
     { key: 'dir', label: 'Folder (optional)', placeholder: 'posts', optional: true },
