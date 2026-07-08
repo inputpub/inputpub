@@ -4,7 +4,6 @@ import { destinations, type Destination } from './destinations'
 import {
   GearIcon,
   MoreIcon,
-  LoadIcon,
   ImageIcon,
   FeedbackIcon,
   MonitorIcon,
@@ -15,6 +14,7 @@ import {
   ChevronRightIcon,
   ChevronLeftIcon,
   FolderIcon,
+  SendIcon,
 } from './destinations/icons'
 import { applyThemePref, getThemePref, nextThemePref, type ThemePref } from './lib/theme'
 import { renderTemplate, templateVars } from './lib/template'
@@ -24,10 +24,12 @@ import {
   debounce,
   getConfig,
   getEnabled,
+  getVaultSidebarOpen,
   loadDraft,
   saveDraft,
   setConfig,
   setEnabled,
+  setVaultSidebarOpen as persistVaultSidebarOpen,
 } from './lib/storage'
 import {
   activeVaultBatchesWrites,
@@ -43,7 +45,6 @@ import {
 } from './lib/vault'
 import { Menu, MenuDivider, MenuItem } from './components/Menu'
 import { Toast, type ToastStatus } from './components/Toast'
-import { LoadDialog } from './components/dialogs/LoadDialog'
 import { ConfigDialog } from './components/dialogs/ConfigDialog'
 import { AiProviderDialog } from './components/dialogs/AiProviderDialog'
 import { AiPromptsDialog } from './components/dialogs/AiPromptsDialog'
@@ -72,23 +73,23 @@ function App() {
 
   const [status, setStatus] = useState<ToastStatus | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
-  const [menuOpen, setMenuOpen] = useState(false)
   const [toolsOpen, setToolsOpen] = useState(false)
-  // The tools menu drills into a "Settings" sub-view holding the config entries
-  // (image host / AI) that are noise for users who don't use those features.
-  const [toolsView, setToolsView] = useState<'main' | 'settings'>('main')
+  // The tools menu drills into sub-views: "Publish" (the destination list) and
+  // "Settings" (config entries — image host / AI — that are noise for users
+  // who don't use those features).
+  const [toolsView, setToolsView] = useState<'main' | 'publish' | 'settings'>('main')
   const [theme, setTheme] = useState<ThemePref>(getThemePref)
   const [imageHostOpen, setImageHostOpen] = useState(false)
   const [imageChoiceOpen, setImageChoiceOpen] = useState(false)
-  const [loadOpen, setLoadOpen] = useState(false)
   const [aiProviderOpen, setAiProviderOpen] = useState(false)
   const [aiPromptsOpen, setAiPromptsOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [configFor, setConfigFor] = useState<Destination | null>(null)
   const [promptFor, setPromptFor] = useState<Destination | null>(null)
-  // The vault sidebar is closed by default; opening it shows either the
-  // "connect a vault" form or the file tree, depending on connection state.
-  const [vaultSidebarOpen, setVaultSidebarOpen] = useState(false)
+  // The vault sidebar remembers its last open/closed state across reloads;
+  // opening it shows either the "connect a vault" form or the file tree,
+  // depending on connection state.
+  const [vaultSidebarOpen, setVaultSidebarOpen] = useState(() => getVaultSidebarOpen() ?? false)
   // The path of the vault file currently loaded into the editor, if any —
   // when set, edits save to the vault instead of the local draft.
   const [vaultPath, setVaultPath] = useState<string | undefined>(undefined)
@@ -98,16 +99,13 @@ function App() {
     for (const d of destinations) m[d.id] = getEnabled(d.id) ?? d.defaultEnabled ?? true
     return m
   })
-  const publishRef = useRef<HTMLDivElement>(null)
   const toolsRef = useRef<HTMLDivElement>(null)
 
-  const closeMenu = useCallback(() => setMenuOpen(false), [])
   const closeTools = useCallback(() => {
     setToolsOpen(false)
-    // Reset to the top level so it doesn't reopen inside Settings next time.
+    // Reset to the top level so it doesn't reopen inside a sub-view next time.
     setToolsView('main')
   }, [])
-  useDismiss(publishRef, closeMenu, menuOpen)
   useDismiss(toolsRef, closeTools, toolsOpen)
 
   // Swap the editor to new content (remount with a fresh seed) and record
@@ -116,25 +114,6 @@ function App() {
     setSeed(content)
     setEditorKey((k) => k + 1)
     setVaultPath(path)
-  }
-
-  // Replace the editor's content and persist it — to the open vault file if
-  // one is active, otherwise the local draft. Loading content is itself an
-  // explicit action, so it flushes immediately rather than waiting on the
-  // vault's usual save-batching.
-  function loadContent(text: string) {
-    showDocument(text, vaultPath)
-    if (vaultPath) {
-      stageVaultEdit(text)
-      void flushPendingVaultSave().catch((err) => {
-        setStatus({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
-      })
-      // The remount will echo `text` back normalized — treat that as the
-      // baseline, not a fresh edit (see stageVaultEdit).
-      expectReloadEcho()
-    } else {
-      saveDraft(text)
-    }
   }
 
   // Remount the editor while keeping its current content — used when editor-time
@@ -159,11 +138,13 @@ function App() {
   }, [status])
 
   // On first mount, reopen whatever vault file was left open last session.
+  // Auto-open the sidebar alongside it only for users who've never toggled
+  // it — once they have, their stored preference wins.
   useEffect(() => {
     reopenLastVaultFile().then((opened) => {
       if (!opened) return
       showDocument(opened.content, opened.path)
-      setVaultSidebarOpen(true)
+      if (getVaultSidebarOpen() === undefined) setVaultSidebarOpen(true)
     })
   }, [])
 
@@ -375,7 +356,8 @@ function App() {
   }
 
   function pick(dest: Destination) {
-    setMenuOpen(false)
+    if (busy) return
+    closeTools()
     if (!isConfigured(dest)) setConfigFor(dest)
     else proceed(dest)
   }
@@ -396,11 +378,11 @@ function App() {
           onError={(text) => setStatus({ kind: 'error', text })}
         />
       )}
-      {/* Top bar: scrolls with the page (absolute, not fixed) so Publish never
-          covers the text once you scroll down. Its inner edges align with the
-          centered sheet (same max-width + horizontal padding as the sheet area).
-          Empty area lets clicks pass through; the two groups re-enable pointer
-          events. */}
+      {/* Top bar: scrolls with the page (absolute, not fixed) so the buttons
+          never cover the text once you scroll down. Its inner edges align with
+          the centered sheet (same max-width + horizontal padding as the sheet
+          area). Empty area lets clicks pass through; the two groups re-enable
+          pointer events. */}
       <div className="pointer-events-none absolute inset-x-0 top-4 z-40 mx-auto flex max-w-[calc(var(--sheet-max)+2*var(--page-pad))] items-start justify-between px-[var(--page-pad)]">
         <div className="pointer-events-auto relative">
           <button
@@ -409,7 +391,11 @@ function App() {
             aria-pressed={vaultSidebarOpen}
             aria-label="Toggle vault"
             title="Vault"
-            onClick={() => setVaultSidebarOpen((o) => !o)}
+            onClick={() => {
+              const next = !vaultSidebarOpen
+              setVaultSidebarOpen(next)
+              persistVaultSidebarOpen(next)
+            }}
           >
             <span className="inline-flex text-[1.15rem] leading-none [&_svg]:block [&_svg]:size-[1em]">
               {FolderIcon}
@@ -436,14 +422,13 @@ function App() {
                 {toolsView === 'main' ? (
                   <>
                     <MenuItem
-                      icon={LoadIcon}
-                      onClick={() => {
-                        closeTools()
-                        setLoadOpen(true)
-                      }}
+                      icon={SendIcon}
+                      trailing={ChevronRightIcon}
+                      onClick={() => setToolsView('publish')}
                     >
-                      Load content
+                      {busy ? 'Publishing…' : 'Publish to'}
                     </MenuItem>
+                    <MenuDivider />
                     <MenuItem
                       icon={
                         theme === 'system' ? MonitorIcon : theme === 'light' ? SunIcon : MoonIcon
@@ -471,6 +456,35 @@ function App() {
                       onClick={() => closeTools()}
                     >
                       Feedback
+                    </MenuItem>
+                  </>
+                ) : toolsView === 'publish' ? (
+                  <>
+                    <MenuItem icon={ChevronLeftIcon} onClick={() => setToolsView('main')}>
+                      Back
+                    </MenuItem>
+                    <MenuDivider />
+                    {destinations
+                      .filter((dest) => enabledMap[dest.id])
+                      .map((dest) => (
+                        <MenuItem
+                          key={dest.id}
+                          icon={dest.icon}
+                          title={dest.hint}
+                          onClick={() => pick(dest)}
+                        >
+                          {dest.name}
+                        </MenuItem>
+                      ))}
+                    <MenuDivider />
+                    <MenuItem
+                      icon={GearIcon}
+                      onClick={() => {
+                        closeTools()
+                        setSettingsOpen(true)
+                      }}
+                    >
+                      Customize
                     </MenuItem>
                   </>
                 ) : (
@@ -508,54 +522,6 @@ function App() {
                     </MenuItem>
                   </>
                 )}
-              </Menu>
-            )}
-          </div>
-
-          <div className="relative" ref={publishRef}>
-            <button
-              type="button"
-              className="group inline-flex cursor-pointer items-center gap-[0.3rem] rounded-md border border-transparent py-[0.3rem] pl-[0.6rem] pr-[0.4rem] font-medium leading-none text-muted opacity-70 transition duration-150 enabled:hover:bg-hover enabled:hover:text-text enabled:hover:opacity-100 enabled:active:translate-y-px disabled:cursor-default disabled:opacity-45"
-              disabled={busy !== null}
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-              onClick={() => setMenuOpen((o) => !o)}
-            >
-              <span>{busy ? 'Publishing…' : 'Publish'}</span>
-              <svg
-                className="shrink-0 opacity-70 transition-transform duration-150 group-aria-expanded:rotate-180"
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M6 9l6 6 6-6" />
-              </svg>
-            </button>
-            {menuOpen && (
-              <Menu>
-                {destinations
-                  .filter((dest) => enabledMap[dest.id])
-                  .map((dest) => (
-                    <MenuItem key={dest.id} icon={dest.icon} title={dest.hint} onClick={() => pick(dest)}>
-                      {dest.name}
-                    </MenuItem>
-                  ))}
-                <MenuDivider />
-                <MenuItem
-                  icon={GearIcon}
-                  onClick={() => {
-                    setMenuOpen(false)
-                    setSettingsOpen(true)
-                  }}
-                >
-                  Customize
-                </MenuItem>
               </Menu>
             )}
           </div>
@@ -634,14 +600,6 @@ function App() {
           enabled={enabledMap}
           onToggle={toggleEnabled}
           onClose={() => setSettingsOpen(false)}
-        />
-      )}
-
-      {loadOpen && (
-        <LoadDialog
-          hasContent={() => !!editorRef.current?.getMarkdown()?.trim()}
-          onLoaded={loadContent}
-          onClose={() => setLoadOpen(false)}
         />
       )}
 

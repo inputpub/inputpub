@@ -112,25 +112,6 @@ export const MoreIcon: ReactNode = (
   </svg>
 )
 
-/* Load content — a tray with a down arrow (import into the editor). */
-export const LoadIcon: ReactNode = (
-  <svg
-    viewBox="0 0 24 24"
-    width="1em"
-    height="1em"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-    <polyline points="7 10 12 15 17 10" />
-    <line x1="12" y1="15" x2="12" y2="3" />
-  </svg>
-)
-
 /* Image host — a picture frame. */
 export const ImageIcon: ReactNode = (
   <svg
@@ -224,6 +205,14 @@ export const EditIcon: ReactNode = lineIcon(
 /* Chevrons for menu drill-in (Settings submenu). */
 export const ChevronRightIcon: ReactNode = lineIcon(<path d="M9 6l6 6-6 6" />)
 export const ChevronLeftIcon: ReactNode = lineIcon(<path d="M15 6l-6 6 6 6" />)
+
+/* Publish — a paper plane. */
+export const SendIcon: ReactNode = lineIcon(
+  <>
+    <path d="M22 2 11 13" />
+    <path d="M22 2 15 22l-4-9-9-4z" />
+  </>,
+)
 
 /* Vault — a folder. */
 export const FolderIcon: ReactNode = lineIcon(

@@ -5,6 +5,7 @@ const IMAGE_HOST_DEFAULT_KEY = 'inputpub.imagehost.default'
 const VAULT_INSTANCES_KEY = 'inputpub.vault.instances'
 const VAULT_ACTIVE_KEY = 'inputpub.vault.active'
 const VAULT_OPEN_FILE_KEY = 'inputpub.vault.openFile'
+const VAULT_SIDEBAR_KEY = 'inputpub.vault.sidebarOpen'
 
 export function loadDraft(): string {
   try {
@@ -246,6 +247,24 @@ export function setVaultOpenFile(path: string): void {
 export function clearVaultOpenFile(): void {
   try {
     localStorage.removeItem(VAULT_OPEN_FILE_KEY)
+  } catch {
+    /* storage unavailable — ignore */
+  }
+}
+
+/** Whether the vault sidebar was left open. undefined = never toggled. */
+export function getVaultSidebarOpen(): boolean | undefined {
+  try {
+    const v = localStorage.getItem(VAULT_SIDEBAR_KEY)
+    return v == null ? undefined : v === '1'
+  } catch {
+    return undefined
+  }
+}
+
+export function setVaultSidebarOpen(open: boolean): void {
+  try {
+    localStorage.setItem(VAULT_SIDEBAR_KEY, open ? '1' : '0')
   } catch {
     /* storage unavailable — ignore */
   }
