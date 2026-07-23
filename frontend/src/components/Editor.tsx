@@ -16,6 +16,9 @@ export interface EditorHandle {
 interface EditorProps {
   /** Initial content, loaded once on mount. */
   defaultValue: string
+  /** Place the cursor in the editor once it's ready. Read on mount — the app
+   *  remounts the editor per opened file, so this focuses that fresh mount. */
+  autoFocus?: boolean
   /** Called (debounced by Milkdown) whenever the markdown changes. */
   onChange?: (markdown: string) => void
   /** Called when an image upload is attempted but no image host is configured,
@@ -36,6 +39,7 @@ interface EditorProps {
 
 export function Editor({
   defaultValue,
+  autoFocus,
   onChange,
   onImageUploadUnconfigured,
   onImageUploadError,
@@ -204,6 +208,9 @@ export function Editor({
         return
       }
       crepeRef.current = crepe
+      // Place the cursor in the doc so the user can type immediately (e.g. right
+      // after opening a file). ProseMirror focus lands the caret at the start.
+      if (autoFocus) (root.querySelector('.ProseMirror') as HTMLElement | null)?.focus()
       ensureEditLink()
       // ensureEditLink early-returns once the link is present and connected, so
       // this is a cheap querySelector per mutation batch.

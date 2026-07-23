@@ -5,6 +5,7 @@ import {
   activeVaultInstance,
   connectVault,
   createVaultFile,
+  deleteVaultDir,
   deleteVaultFile,
   disconnectVault,
   generateVaultInstanceId,
@@ -77,26 +78,82 @@ function instanceLabel(instance: VaultInstance): string {
   return instance.provider.label?.(vaultCtxFor(instance.id)) ?? instance.provider.name
 }
 
+/** The create-a-file interaction, threaded down the tree so a folder's + can
+ *  target itself. `parent` is the folder path currently being created in
+ *  ('' = tree root, null = not creating). */
+interface CreateState {
+  parent: string | null
+  value: string
+  onChange: (value: string) => void
+  onSubmit: () => void
+  onCancel: () => void
+  onRequest: (parentPath: string) => void
+}
+
+/** The inline "name a new file" input — shown at the tree root, or nested in a
+ *  folder once its + is clicked (in which case only the filename is typed and
+ *  the folder path is prepended on submit). */
+function NewFileInput({
+  value,
+  placeholder,
+  onChange,
+  onSubmit,
+  onCancel,
+}: {
+  value: string
+  placeholder: string
+  onChange: (value: string) => void
+  onSubmit: () => void
+  onCancel: () => void
+}) {
+  return (
+    <input
+      autoFocus
+      className="mb-[0.3rem] w-full rounded-md border border-line bg-bg px-[0.5rem] py-[0.3rem] text-[0.82rem] text-inherit focus:border-accent focus:outline-none"
+      placeholder={placeholder}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') onSubmit()
+        if (e.key === 'Escape') onCancel()
+      }}
+      onBlur={() => {
+        if (!value.trim()) onCancel()
+      }}
+    />
+  )
+}
+
 function Row({
   node,
   depth,
   currentPath,
+  create,
   onOpen,
   onDelete,
 }: {
   node: TreeNode
   depth: number
   currentPath: string | undefined
+  create: CreateState
   onOpen: (path: string) => void
   onDelete: (node: TreeNode) => void
 }) {
-  const [open, setOpen] = useState(true)
-  const indent = { paddingLeft: `${0.4 + depth * 1.1}rem` }
+  // Collapsed by default to keep the tree tidy; a folder starts open only when
+  // it's on the path to the file currently loaded in the editor, so the active
+  // file stays visible after a reload.
+  const [open, setOpen] = useState(
+    () => !!currentPath && currentPath.startsWith(`${node.path}/`),
+  )
+  // A folder's own chevron+icon already push its glyph ~1.5rem in, so a child
+  // needs more than that per level or its icon lands in the same column as its
+  // parent's, making folders and files hard to tell apart at a glance.
+  const indent = { paddingLeft: `${0.4 + depth * 1.6}rem` }
 
   if (node.type === 'dir') {
     return (
       <div>
-        <button type="button" className={rowCls} style={indent} onClick={() => setOpen((o) => !o)}>
+        <div className={rowCls} style={indent} onClick={() => setOpen((o) => !o)}>
           <svg
             className={`size-[0.8em] shrink-0 opacity-45 transition-transform duration-150 ${open ? 'rotate-90' : ''}`}
             viewBox="0 0 24 24"
@@ -110,16 +167,51 @@ function Row({
             <path d="M9 6l6 6-6 6" />
           </svg>
           <span className={iconCls}>{FolderIcon}</span>
-          <span className="truncate">{node.name}</span>
-        </button>
+          <span className="min-w-0 flex-1 truncate">{node.name}</span>
+          <button
+            type="button"
+            className="ml-auto hidden shrink-0 rounded p-[0.15rem] text-muted opacity-70 hover:bg-line hover:text-text hover:opacity-100 group-hover:inline-flex [&_svg]:block [&_svg]:size-[0.85em]"
+            title="New file in this folder"
+            onClick={(e) => {
+              e.stopPropagation()
+              setOpen(true)
+              create.onRequest(node.path)
+            }}
+          >
+            {PlusIcon}
+          </button>
+          <button
+            type="button"
+            className="hidden shrink-0 rounded p-[0.15rem] text-muted opacity-70 hover:bg-line hover:text-text hover:opacity-100 group-hover:inline-flex [&_svg]:block [&_svg]:size-[0.85em]"
+            title="Delete folder"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete(node)
+            }}
+          >
+            {TrashIcon}
+          </button>
+        </div>
         {open && (
           <div>
+            {create.parent === node.path && (
+              <div style={{ paddingLeft: `${0.4 + (depth + 1) * 1.6}rem` }}>
+                <NewFileInput
+                  value={create.value}
+                  placeholder="new-file.md"
+                  onChange={create.onChange}
+                  onSubmit={create.onSubmit}
+                  onCancel={create.onCancel}
+                />
+              </div>
+            )}
             {node.children.map((child) => (
               <Row
                 key={child.path}
                 node={child}
                 depth={depth + 1}
                 currentPath={currentPath}
+                create={create}
                 onOpen={onOpen}
                 onDelete={onDelete}
               />
@@ -315,13 +407,28 @@ export function VaultSidebar({
   const [switcherOpen, setSwitcherOpen] = useState(false)
   const [entries, setEntries] = useState<VaultEntry[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [creating, setCreating] = useState(false)
+  // Which folder a new file is being named in: null = not creating, '' = tree
+  // root (the header + button), or a folder path (that folder's hover +).
+  const [createParent, setCreateParent] = useState<string | null>(null)
   const [newPath, setNewPath] = useState('')
   const [busy, setBusy] = useState(false)
-  const newInputRef = useRef<HTMLInputElement>(null)
+  // Inline feedback for create/delete: a transient status line at the top of
+  // the tree — in-progress while it runs (a GitHub write is a commit, so it
+  // isn't instant), then a done state briefly after, since the affected row may
+  // vanish (delete) or scroll out (create).
+  const [deleting, setDeleting] = useState(false)
+  const [opMsg, setOpMsg] = useState<{ text: string; done: boolean } | null>(null)
+  const opMsgTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const switcherRef = useRef<HTMLDivElement>(null)
   const closeSwitcher = useCallback(() => setSwitcherOpen(false), [])
   useDismiss(switcherRef, closeSwitcher, switcherOpen)
+
+  const flashDone = (text: string) => {
+    setOpMsg({ text, done: true })
+    if (opMsgTimer.current) clearTimeout(opMsgTimer.current)
+    opMsgTimer.current = setTimeout(() => setOpMsg(null), 2500)
+  }
+  useEffect(() => () => clearTimeout(opMsgTimer.current), [])
 
   const refresh = () => {
     loadVaultTree()
@@ -344,27 +451,39 @@ export function VaultSidebar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, activeId])
 
-  useEffect(() => {
-    if (creating) newInputRef.current?.focus()
-  }, [creating])
-
   const tree = useMemo(() => (entries ? buildTree(entries) : []), [entries])
 
+  const startCreate = (parent: string) => {
+    setCreateParent(parent)
+    setNewPath('')
+  }
+  const cancelCreate = () => {
+    setCreateParent(null)
+    setNewPath('')
+  }
+
   async function submitCreate() {
-    let path = newPath.trim()
-    if (!path || busy) return
+    const name = newPath.trim()
+    if (!name || busy || createParent === null) return
+    // createParent === '' creates at the root (name may itself be a subpath);
+    // otherwise the file lands inside the folder whose + was clicked.
+    let path = createParent ? `${createParent}/${name}` : name
     if (!/\.md$/i.test(path)) path += '.md'
+    const shown = path.split('/').pop() ?? path
     setBusy(true)
+    setOpMsg({ text: `Creating ${shown}…`, done: false })
     try {
       await createVaultFile(path)
-      setCreating(false)
+      setCreateParent(null)
       setNewPath('')
       // Update the list from what we already know, rather than re-fetching —
       // right after a write, some providers (e.g. GitHub) can briefly still
       // return the pre-write tree if the API is re-read immediately.
       setEntries((prev) => [...(prev ?? []), { path, type: 'file' }])
       onCreated(path)
+      flashDone(`Created ${shown}`)
     } catch (err) {
+      setOpMsg(null)
       onError(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
@@ -372,13 +491,50 @@ export function VaultSidebar({
   }
 
   async function handleDelete(node: TreeNode) {
+    if (deleting) return
+    if (node.type === 'dir') {
+      // A folder is synthesized from paths — deleting it deletes everything
+      // beneath it (including files the tree doesn't show, see deleteVaultDir).
+      if (
+        !window.confirm(
+          `Delete the folder “${node.name}” and all files inside it? This can’t be undone.`,
+        )
+      )
+        return
+      const prefix = `${node.path}/`
+      setDeleting(true)
+      setOpMsg({ text: `Deleting “${node.name}”…`, done: false })
+      try {
+        await deleteVaultDir(node.path)
+        setEntries((prev) => prev?.filter((e) => e.path !== node.path && !e.path.startsWith(prefix)) ?? prev)
+        if (currentPath && (currentPath === node.path || currentPath.startsWith(prefix))) {
+          onDeleted(currentPath)
+        }
+        flashDone(`Deleted “${node.name}”`)
+      } catch (err) {
+        setOpMsg(null)
+        onError(err instanceof Error ? err.message : String(err))
+        // A folder delete can fail partway (several commits on GitHub) — resync
+        // the tree to what actually remains.
+        refresh()
+      } finally {
+        setDeleting(false)
+      }
+      return
+    }
     if (!window.confirm(`Delete ${node.path}?`)) return
+    setDeleting(true)
+    setOpMsg({ text: `Deleting ${node.name}…`, done: false })
     try {
       await deleteVaultFile(node.path)
       setEntries((prev) => prev?.filter((e) => e.path !== node.path) ?? prev)
       onDeleted(node.path)
+      flashDone(`Deleted ${node.name}`)
     } catch (err) {
+      setOpMsg(null)
       onError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -444,6 +600,15 @@ export function VaultSidebar({
       ? () => setConfigTarget(null)
       : undefined
 
+  const create: CreateState = {
+    parent: createParent,
+    value: newPath,
+    onChange: setNewPath,
+    onSubmit: () => void submitCreate(),
+    onCancel: cancelCreate,
+    onRequest: startCreate,
+  }
+
   return (
     // Floats beside the sheet's left edge rather than hugging the viewport —
     // its position is derived from the same --sheet-max / --page-pad vars the
@@ -501,7 +666,7 @@ export function VaultSidebar({
               type="button"
               className="inline-flex cursor-pointer items-center justify-center rounded-md p-[0.3rem] text-muted hover:bg-hover hover:text-text [&_svg]:block [&_svg]:size-[0.95em]"
               title="New file"
-              onClick={() => setCreating(true)}
+              onClick={() => startCreate('')}
             >
               {PlusIcon}
             </button>
@@ -544,23 +709,35 @@ export function VaultSidebar({
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto p-[0.4rem]">
-          {creating && (
-            <input
-              ref={newInputRef}
-              className="mb-[0.3rem] w-full rounded-md border border-line bg-bg px-[0.5rem] py-[0.3rem] text-[0.82rem] text-inherit focus:border-accent focus:outline-none"
-              placeholder="notes/todo.md"
+          {opMsg && (
+            <div className="mb-[0.3rem] flex items-center gap-[0.4rem] px-[0.4rem] py-[0.3rem] text-[0.78rem] text-muted">
+              {opMsg.done ? (
+                <span className="inline-flex text-[#3fb950] [&_svg]:block [&_svg]:size-[0.9em]">
+                  {CheckIcon}
+                </span>
+              ) : (
+                <svg
+                  className="size-[0.85em] shrink-0 animate-spin opacity-70"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  aria-hidden="true"
+                >
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                </svg>
+              )}
+              <span className="truncate">{opMsg.text}</span>
+            </div>
+          )}
+          {createParent === '' && (
+            <NewFileInput
               value={newPath}
-              onChange={(e) => setNewPath(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void submitCreate()
-                if (e.key === 'Escape') {
-                  setCreating(false)
-                  setNewPath('')
-                }
-              }}
-              onBlur={() => {
-                if (!newPath.trim()) setCreating(false)
-              }}
+              placeholder="notes/todo.md"
+              onChange={setNewPath}
+              onSubmit={() => void submitCreate()}
+              onCancel={cancelCreate}
             />
           )}
           {entries === null ? (
@@ -590,6 +767,7 @@ export function VaultSidebar({
                 node={node}
                 depth={0}
                 currentPath={currentPath}
+                create={create}
                 onOpen={onOpen}
                 onDelete={handleDelete}
               />

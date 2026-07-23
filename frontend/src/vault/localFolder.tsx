@@ -117,4 +117,13 @@ export const localFolderVault: VaultProvider = {
     const dirHandle = await getDirForPath(root, dir, false)
     await dirHandle.removeEntry(name)
   },
+
+  async deleteDir(ctx, path) {
+    const root = await getRootHandle(ctx.id)
+    const { dir, name } = splitPath(path)
+    const parent = await getDirForPath(root, dir, false)
+    // recursive removes the folder and everything under it (including non-text
+    // files the tree doesn't list) in one call.
+    await parent.removeEntry(name, { recursive: true })
+  },
 }

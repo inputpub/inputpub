@@ -340,3 +340,24 @@ export async function deleteVaultFile(path: string): Promise<void> {
   await active.provider.deleteFile(vaultCtxFor(active.id), path)
   if (openPath === path) clearOpenFile()
 }
+
+/** Delete a folder and everything under it. Prefers the provider's own
+ *  `deleteDir` (which can reach files the tree hides); otherwise falls back to
+ *  deleting the listed files under the prefix. */
+export async function deleteVaultDir(path: string): Promise<void> {
+  const active = activeVaultInstance()
+  if (!active) throw new Error('No vault connected')
+  const ctx = vaultCtxFor(active.id)
+  const prefix = `${path}/`
+  if (active.provider.deleteDir) {
+    await active.provider.deleteDir(ctx, path)
+  } else {
+    const tree = await active.provider.listTree(ctx)
+    for (const entry of tree) {
+      if (entry.type === 'file' && entry.path.startsWith(prefix)) {
+        await active.provider.deleteFile(ctx, entry.path)
+      }
+    }
+  }
+  if (openPath && (openPath === path || openPath.startsWith(prefix))) clearOpenFile()
+}

@@ -179,4 +179,40 @@ export const githubVault: VaultProvider = {
       throw new Error(`Delete failed (${res.status})${detail ? `: ${detail.slice(0, 140)}` : ''}`)
     }
   },
+
+  async deleteDir(ctx, path) {
+    const { repo, token } = repoAndToken(ctx)
+    const branch = await resolveBranch(ctx, repo, token)
+    // The tree lists *every* blob (not just the text files the sidebar shows),
+    // so this also removes images/PDFs that would otherwise keep the folder
+    // alive — git has no empty directories.
+    const res = await fetch(
+      `https://api.github.com/repos/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
+      { headers: headers(token) },
+    )
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '')
+      throw new Error(
+        `Couldn't load the repo tree (${res.status})${detail ? `: ${detail.slice(0, 140)}` : ''}`,
+      )
+    }
+    const data = (await res.json()) as { tree?: { path: string; type: string; sha: string }[] }
+    const prefix = `${path}/`
+    const blobs = (data.tree ?? []).filter((i) => i.type === 'blob' && i.path.startsWith(prefix))
+    // Each delete is its own commit (the Contents API is one file at a time);
+    // reuse the sha the tree already gave us instead of a lookup per file.
+    for (const blob of blobs) {
+      const del = await fetch(contentsUrl(repo, blob.path), {
+        method: 'DELETE',
+        headers: headers(token),
+        body: JSON.stringify({ message: `Delete ${blob.path}`, sha: blob.sha, branch }),
+      })
+      if (!del.ok) {
+        const detail = await del.text().catch(() => '')
+        throw new Error(
+          `Delete failed for ${blob.path} (${del.status})${detail ? `: ${detail.slice(0, 140)}` : ''}`,
+        )
+      }
+    }
+  },
 }

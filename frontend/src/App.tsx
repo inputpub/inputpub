@@ -70,6 +70,9 @@ function App() {
   // remount it with fresh content (used by "Load content" and opening a vault file).
   const [seed, setSeed] = useState<string>(() => loadDraft())
   const [editorKey, setEditorKey] = useState(0)
+  // Whether the next editor (re)mount should grab focus — set true when the
+  // remount is from opening/creating a file, so the cursor lands ready to type.
+  const [focusMount, setFocusMount] = useState(false)
 
   const [status, setStatus] = useState<ToastStatus | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -110,10 +113,11 @@ function App() {
 
   // Swap the editor to new content (remount with a fresh seed) and record
   // which vault file it belongs to (undefined = the local draft).
-  function showDocument(content: string, path: string | undefined) {
+  function showDocument(content: string, path: string | undefined, focus = false) {
     setSeed(content)
     setEditorKey((k) => k + 1)
     setVaultPath(path)
+    setFocusMount(focus)
   }
 
   // Remount the editor while keeping its current content — used when editor-time
@@ -228,16 +232,17 @@ function App() {
   async function openVaultPath(path: string) {
     try {
       const content = await openVaultFile(path)
-      showDocument(content, path)
+      showDocument(content, path, true)
       resetVaultSaveState()
     } catch (err) {
       setStatus({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     }
   }
 
-  // A file was just created in the sidebar — it's already open (and empty).
+  // A file was just created in the sidebar — it's already open (and empty), so
+  // focus it to start typing right away.
   function onVaultFileCreated(path: string) {
-    showDocument('', path)
+    showDocument('', path, true)
     resetVaultSaveState()
   }
 
@@ -561,6 +566,7 @@ function App() {
             key={editorKey}
             ref={editorRef}
             defaultValue={seed}
+            autoFocus={focusMount}
             onChange={onEditorChange}
             onImageUploadUnconfigured={() => setImageChoiceOpen(true)}
             onImageUploadError={(text) => setStatus({ kind: 'error', text })}

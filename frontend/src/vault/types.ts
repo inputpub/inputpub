@@ -101,4 +101,10 @@ export interface VaultProvider {
   /** Delete a file. Providers needing a current revision to delete (e.g.
    *  GitHub's sha) look it up themselves — callers only know the path. */
   deleteFile: (ctx: VaultContext, path: string) => Promise<void>
+  /** Delete a whole directory and everything beneath it — including files the
+   *  tree doesn't surface (e.g. images, since `listTree` filters to TEXT_EXT).
+   *  Optional: lib/vault falls back to deleting the individually-listed files,
+   *  but that can't reach hidden files, so any provider that hides some (all of
+   *  them today) must implement this to fully remove a folder. */
+  deleteDir?: (ctx: VaultContext, path: string) => Promise<void>
 }
