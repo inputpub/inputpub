@@ -292,14 +292,6 @@ export function setGithubToken(token: string): void {
   }
 }
 
-export function clearGithubToken(): void {
-  try {
-    localStorage.removeItem(GITHUB_LOGIN_KEY)
-  } catch {
-    /* storage unavailable — ignore */
-  }
-}
-
 /** Debounce a function by `wait` ms. */
 export function debounce<A extends unknown[]>(fn: (...args: A) => void, wait: number) {
   let timer: ReturnType<typeof setTimeout> | undefined

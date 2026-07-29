@@ -3,7 +3,7 @@ import type { VaultConnectProps } from './types'
 import { ghGet } from './github'
 import { GitHubIcon } from '../destinations/icons'
 import { isGithubOAuthConfigured, loginWithGitHub } from '../lib/githubOAuth'
-import { clearGithubToken, getGithubToken, setGithubToken } from '../lib/storage'
+import { getGithubToken, setGithubToken } from '../lib/storage'
 
 interface RepoOption {
   fullName: string
@@ -49,13 +49,21 @@ async function fetchRepos(token: string): Promise<RepoOption[]> {
  * is shared across GitHub vaults so a second one reuses it; the repos it grants
  * are fetched live (never cached).
  */
-export function GithubConnect({ ctx, onComplete, onCancel, cancelLabel = 'Cancel' }: VaultConnectProps) {
+export function GithubConnect({
+  ctx,
+  onComplete,
+  configuring,
+  onCancel,
+  cancelLabel = 'Cancel',
+}: VaultConnectProps) {
   const oauth = isGithubOAuthConfigured()
   // A new instance with no token of its own falls back to the shared login, so
   // "logged in" is simply "there is a token".
   const [token, setToken] = useState(() => (ctx.getConfig('token') ?? '').trim() || getGithubToken() || '')
   const [repos, setRepos] = useState<RepoOption[] | null>(null)
   const [repo, setRepo] = useState(() => (ctx.getConfig('repo') ?? '').trim())
+  const [branch, setBranch] = useState(() => (ctx.getConfig('branch') ?? '').trim())
+  const [autosave, setAutosave] = useState(() => (ctx.getConfig('autosaveSeconds') ?? '').trim())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -72,10 +80,11 @@ export function GithubConnect({ ctx, onComplete, onCancel, cancelLabel = 'Cancel
     }
   }
 
-  // On mount, if we already have a token, load its repos.
+  // On mount (new-connection flow only), if we already have a token, load its
+  // repos. Settings mode doesn't pick a repo, so it skips this.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (token) void loadRepos(token)
+    if (!configuring && token) void loadRepos(token)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -96,19 +105,22 @@ export function GithubConnect({ ctx, onComplete, onCancel, cancelLabel = 'Cancel
     }
   }
 
-  function reconnect() {
-    clearGithubToken() // forget the shared login so a new one is required
-    ctx.setConfig('token', '')
-    setToken('')
-    setRepos(null)
-    setRepo('')
-  }
-
   async function finish(fullName: string) {
     if (!fullName) return
     ctx.setConfig('token', token)
     ctx.setConfig('repo', fullName)
     setGithubToken(token)
+    await run()
+  }
+
+  // Settings mode: persist this vault's branch / auto-save config.
+  async function saveSettings() {
+    ctx.setConfig('branch', branch.trim())
+    ctx.setConfig('autosaveSeconds', autosave.trim())
+    await run()
+  }
+
+  async function run() {
     setBusy(true)
     setError(null)
     try {
@@ -128,6 +140,54 @@ export function GithubConnect({ ctx, onComplete, onCancel, cancelLabel = 'Cancel
       <span>GitHub</span>
     </div>
   )
+
+  // Settings mode (gear on the connected vault): just this vault's config.
+  // Repo/account changes and Disconnect live elsewhere (Disconnect is rendered
+  // by the host below this form).
+  if (configuring) {
+    const repoName = (ctx.getConfig('repo') ?? '').trim()
+    return (
+      <div className="flex flex-col gap-[0.7rem] p-[0.7rem]">
+        {header}
+        {repoName && (
+          <p className="m-0 truncate text-[0.78rem] text-muted">
+            Repository: <span className="text-text">{repoName}</span>
+          </p>
+        )}
+        <label className="text-[0.78rem] text-muted">Branch (optional)</label>
+        <input
+          className={fieldCls}
+          placeholder="default branch"
+          value={branch}
+          onChange={(e) => setBranch(e.target.value)}
+        />
+        <label className="text-[0.78rem] text-muted">Auto-save after inactivity (seconds)</label>
+        <input
+          className={fieldCls}
+          type="number"
+          min={1}
+          placeholder="60"
+          value={autosave}
+          onChange={(e) => setAutosave(e.target.value)}
+        />
+        <p className="m-0 text-[0.72rem] leading-snug text-muted">
+          Each save is a commit, so edits are batched into one commit per pause rather than one per
+          keystroke.
+        </p>
+        {error && <p className="m-0 text-[0.78rem] text-[#e5484d]">{error}</p>}
+        <div className="flex justify-end gap-2">
+          {onCancel && (
+            <button type="button" className={ghostBtn} onClick={onCancel}>
+              {cancelLabel}
+            </button>
+          )}
+          <button type="button" className={primaryBtn} disabled={busy} onClick={() => void saveSettings()}>
+            {busy ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   // No token yet → log in.
   if (!token) {
@@ -215,20 +275,17 @@ export function GithubConnect({ ctx, onComplete, onCancel, cancelLabel = 'Cancel
         </div>
         {empty && (
           <p className="m-0 text-[0.78rem] text-muted">
-            You didn’t grant access to any repository. Use “Add or change repositories” below (or
+            You didn’t grant access to any repository. Use “Manage repo access” below (or
             create one first), then refresh.
           </p>
         )}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <button type="button" className={linkBtn} disabled={busy} onClick={() => void login()}>
-            Add or change repositories
+            Manage repo access
           </button>
           <a className={linkBtn} href="https://github.com/new" target="_blank" rel="noreferrer">
             New repository on GitHub ↗
           </a>
-          <button type="button" className={linkBtn} onClick={reconnect}>
-            Use a different account
-          </button>
         </div>
         <div className="mt-[0.4rem] flex justify-end gap-2">
           {onCancel && (

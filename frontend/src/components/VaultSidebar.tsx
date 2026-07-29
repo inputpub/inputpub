@@ -950,6 +950,7 @@ export function VaultSidebar({
               key={configTarget.id}
               ctx={vaultCtxFor(configTarget.id)}
               onComplete={completeConnect}
+              configuring={isConfiguringActive && connected}
               onCancel={configureCancel}
               cancelLabel={connected ? 'Cancel' : 'Back'}
             />

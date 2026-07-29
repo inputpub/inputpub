@@ -56,6 +56,10 @@ export interface VaultConnectProps {
   /** Call once the instance is configured enough to use — the host registers
    *  and activates it, then switches to the file browser. */
   onComplete: () => void | Promise<void>
+  /** True when reconfiguring the already-connected vault (the gear/Settings),
+   *  vs. connecting a new one — lets the form show settings (and rely on the
+   *  host's Disconnect) instead of the connect/resource-picker flow. */
+  configuring?: boolean
   /** Back out of the form (omit to hide the button). */
   onCancel?: () => void
   cancelLabel?: string
