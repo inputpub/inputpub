@@ -42,6 +42,27 @@ export async function loginWithGitHub(): Promise<string> {
   return exchangeCode(code, WORKER_URL)
 }
 
+/** Open the GitHub App's install/configure page so the user can add or remove
+ *  the repositories it can access. Resolves when the popup closes — no token or
+ *  code is involved (the current token already works); the caller just re-lists
+ *  repos afterwards. */
+export function manageRepoAccess(): Promise<void> {
+  if (!APP_SLUG) throw new Error('GitHub login isn’t configured')
+  const url = `https://github.com/apps/${encodeURIComponent(APP_SLUG)}/installations/new`
+  const popup = window.open(url, 'github-oauth', 'width=640,height=760')
+  if (!popup) {
+    return Promise.reject(new Error('Popup blocked — allow popups for this site and try again.'))
+  }
+  return new Promise((resolve) => {
+    const poll = setInterval(() => {
+      if (popup.closed) {
+        clearInterval(poll)
+        resolve()
+      }
+    }, 500)
+  })
+}
+
 /** Waits for the callback page to postMessage the auth code back to us. */
 function waitForCallback(popup: Window, expectedState: string): Promise<string> {
   return new Promise((resolve, reject) => {

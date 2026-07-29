@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { VaultConnectProps } from './types'
 import { ghGet } from './github'
 import { GitHubIcon } from '../destinations/icons'
-import { isGithubOAuthConfigured, loginWithGitHub } from '../lib/githubOAuth'
+import { isGithubOAuthConfigured, loginWithGitHub, manageRepoAccess } from '../lib/githubOAuth'
 import { getGithubToken, setGithubToken } from '../lib/storage'
 
 interface RepoOption {
@@ -102,6 +102,20 @@ export function GithubConnect({
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
+    }
+  }
+
+  // Open GitHub's repo-access page; when it closes, just re-list the repos with
+  // the current token. Not a login — doesn't touch `busy`/the Connect button,
+  // and closing the popup isn't an error.
+  async function manage() {
+    setError(null)
+    try {
+      await manageRepoAccess()
+      setRepos(null)
+      await loadRepos(token)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
     }
   }
 
@@ -275,16 +289,21 @@ export function GithubConnect({
         </div>
         {empty && (
           <p className="m-0 text-[0.78rem] text-muted">
-            You didn’t grant access to any repository. Use “Manage repo access” below (or
-            create one first), then refresh.
+            You didn’t grant access to any repository. Use “Manage repo access” below (or create
+            one on GitHub first).
           </p>
         )}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <button type="button" className={linkBtn} disabled={busy} onClick={() => void login()}>
+          <button
+            type="button"
+            className={linkBtn}
+            disabled={repos === null}
+            onClick={() => void manage()}
+          >
             Manage repo access
           </button>
           <a className={linkBtn} href="https://github.com/new" target="_blank" rel="noreferrer">
-            New repository on GitHub ↗
+            Create repo ↗
           </a>
         </div>
         <div className="mt-[0.4rem] flex justify-end gap-2">
