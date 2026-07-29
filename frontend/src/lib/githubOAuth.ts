@@ -25,21 +25,24 @@ interface CallbackMessage {
   error?: string | null
 }
 
-/** Runs the popup install/authorize flow; resolves with a user access token.
- *  What the token can access (its repos) is fetched live afterwards, not here. */
+/** Runs the popup authorize flow; resolves with a user access token. Uses the
+ *  Worker's /authorize redirect (GitHub's OAuth authorize endpoint), which
+ *  always returns a `code` — including when the App is already installed on the
+ *  account (e.g. logging in on a second device). Repo selection is a separate
+ *  step (manageRepoAccess); what the token can access is fetched live later. */
 export async function loginWithGitHub(): Promise<string> {
-  if (!APP_SLUG || !WORKER_URL) throw new Error('GitHub login isn’t configured')
+  if (!WORKER_URL) throw new Error('GitHub login isn’t configured')
   const state = crypto.randomUUID()
-  // The install page is where GitHub lets the user choose which repositories to
-  // grant. With "Request user authorization during installation" enabled, it
-  // redirects back with a user-auth `code` too.
-  const url = `https://github.com/apps/${encodeURIComponent(APP_SLUG)}/installations/new?state=${encodeURIComponent(state)}`
+  const redirectUri = `${location.origin}/callback.html`
+  const url =
+    `${WORKER_URL}/authorize?state=${encodeURIComponent(state)}` +
+    `&redirect_uri=${encodeURIComponent(redirectUri)}`
 
   const popup = window.open(url, 'github-oauth', 'width=640,height=760')
   if (!popup) throw new Error('Popup blocked — allow popups for this site and try again.')
 
   const code = await waitForCallback(popup, state)
-  return exchangeCode(code, WORKER_URL)
+  return exchangeCode(code, redirectUri, WORKER_URL)
 }
 
 /** Open the GitHub App's install/configure page so the user can add or remove
@@ -103,11 +106,11 @@ function waitForCallback(popup: Window, expectedState: string): Promise<string> 
 }
 
 /** Swaps the auth code for a token via the stateless proxy Worker. */
-async function exchangeCode(code: string, workerUrl: string): Promise<string> {
+async function exchangeCode(code: string, redirectUri: string, workerUrl: string): Promise<string> {
   const res = await fetch(workerUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code }),
+    body: JSON.stringify({ code, redirect_uri: redirectUri }),
   })
   const data = (await res.json().catch(() => ({}))) as { access_token?: string; error?: string }
   if (!res.ok || !data.access_token) {

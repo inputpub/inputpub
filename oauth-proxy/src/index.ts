@@ -38,11 +38,34 @@ function json(body: unknown, status: number, cors: Record<string, string>): Resp
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url)
     const origin = request.headers.get('Origin') ?? ''
     const allowed = (env.ALLOWED_ORIGINS ?? '')
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean)
+
+    // GET /authorize → redirect to GitHub's OAuth authorize endpoint. Done
+    // server-side so the client_id stays here, and — unlike the App's install
+    // page — this reliably returns a `code` even when the App is already
+    // installed on the account (e.g. logging in on a second device).
+    if (request.method === 'GET' && url.pathname === '/authorize') {
+      const redirectUri = url.searchParams.get('redirect_uri') ?? ''
+      let redirectOk = false
+      try {
+        redirectOk = allowed.includes(new URL(redirectUri).origin)
+      } catch {
+        redirectOk = false
+      }
+      if (!redirectOk) return new Response('Bad redirect_uri', { status: 400 })
+      const gh = new URL('https://github.com/login/oauth/authorize')
+      gh.searchParams.set('client_id', env.GITHUB_CLIENT_ID)
+      gh.searchParams.set('redirect_uri', redirectUri)
+      const state = url.searchParams.get('state')
+      if (state) gh.searchParams.set('state', state)
+      return Response.redirect(gh.toString(), 302)
+    }
+
     const cors = corsHeaders(origin, allowed)
 
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors })
