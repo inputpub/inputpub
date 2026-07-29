@@ -157,16 +157,18 @@ export function clearOpenFile(): void {
 }
 
 export async function openVaultFile(path: string): Promise<string> {
-  await flushQuietly()
-  const active = activeVaultInstance()
-  if (!active) throw new Error('No vault connected')
-  const file = await active.provider.readFile(vaultCtxFor(active.id), path)
-  openPath = path
-  openSha = file.sha
-  lastSavedContent = file.content
-  awaitingBaseline = true
-  setVaultOpenFile(path)
-  return file.content
+  return withWriteLock(async () => {
+    await flushInternal().catch(() => {})
+    const active = activeVaultInstance()
+    if (!active) throw new Error('No vault connected')
+    const file = await active.provider.readFile(vaultCtxFor(active.id), path)
+    openPath = path
+    openSha = file.sha
+    lastSavedContent = file.content
+    awaitingBaseline = true
+    setVaultOpenFile(path)
+    return file.content
+  })
 }
 
 /** Programmatically replacing the editor's content (e.g. "Load content")
@@ -265,9 +267,24 @@ export function stageVaultEdit(content: string): void {
   idleTimer = setTimeout(() => void flushPendingVaultSave(), pendingSaveDelayMs())
 }
 
-/** Saves whatever edit is staged, if any — called on checkpoints (switching
- *  files/vaults, losing focus, disconnecting) and by the auto-save timer. */
-export async function flushPendingVaultSave(): Promise<void> {
+// Every vault *write* — autosave, create, delete, rename/move — runs through
+// this one promise chain, so no two ever touch the branch at the same time.
+// Without it, an autosave commit landing in the middle of a move advances the
+// branch head and the move's ref update fails as a non-fast-forward. Reads
+// don't take the lock; the write operations that must see a clean slate (e.g.
+// switching files) flush inside their own locked turn.
+let writeChain: Promise<unknown> = Promise.resolve()
+function noop() {}
+function withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
+  const result = writeChain.then(fn, fn)
+  // Keep the chain alive whether this turn resolved or rejected.
+  writeChain = result.then(noop, noop)
+  return result
+}
+
+/** The actual staged-edit save, without taking the write lock — for callers
+ *  that already hold it (they flush the open file before switching/moving). */
+async function flushInternal(): Promise<void> {
   clearIdleTimer()
   if (pendingContent === undefined) return
   const content = pendingContent
@@ -280,6 +297,13 @@ export async function flushPendingVaultSave(): Promise<void> {
     setSaveState('error', err instanceof Error ? err.message : String(err))
     throw err
   }
+}
+
+/** Saves whatever edit is staged, if any — called on checkpoints (switching
+ *  files/vaults, losing focus, disconnecting) and by the auto-save timer.
+ *  Serialized against every other vault write. */
+export async function flushPendingVaultSave(): Promise<void> {
+  return withWriteLock(flushInternal)
 }
 
 /** Reopens the file remembered from a previous session, if any. */
@@ -323,41 +347,108 @@ export async function saveVaultFile(content: string): Promise<void> {
 /** Creates an empty file and marks it as the open file (no read-back needed —
  *  the caller already knows the content is `''`). */
 export async function createVaultFile(path: string): Promise<void> {
-  await flushQuietly()
-  const active = activeVaultInstance()
-  if (!active) throw new Error('No vault connected')
-  const { sha } = await active.provider.writeFile(vaultCtxFor(active.id), path, '')
-  openPath = path
-  openSha = sha
-  lastSavedContent = ''
-  awaitingBaseline = true
-  setVaultOpenFile(path)
+  return withWriteLock(async () => {
+    await flushInternal().catch(() => {})
+    const active = activeVaultInstance()
+    if (!active) throw new Error('No vault connected')
+    const { sha } = await active.provider.writeFile(vaultCtxFor(active.id), path, '')
+    openPath = path
+    openSha = sha
+    lastSavedContent = ''
+    awaitingBaseline = true
+    setVaultOpenFile(path)
+  })
 }
 
 export async function deleteVaultFile(path: string): Promise<void> {
-  const active = activeVaultInstance()
-  if (!active) throw new Error('No vault connected')
-  await active.provider.deleteFile(vaultCtxFor(active.id), path)
-  if (openPath === path) clearOpenFile()
+  return withWriteLock(async () => {
+    const active = activeVaultInstance()
+    if (!active) throw new Error('No vault connected')
+    await active.provider.deleteFile(vaultCtxFor(active.id), path)
+    if (openPath === path) clearOpenFile()
+  })
 }
 
 /** Delete a folder and everything under it. Prefers the provider's own
  *  `deleteDir` (which can reach files the tree hides); otherwise falls back to
  *  deleting the listed files under the prefix. */
 export async function deleteVaultDir(path: string): Promise<void> {
-  const active = activeVaultInstance()
-  if (!active) throw new Error('No vault connected')
-  const ctx = vaultCtxFor(active.id)
-  const prefix = `${path}/`
-  if (active.provider.deleteDir) {
-    await active.provider.deleteDir(ctx, path)
-  } else {
-    const tree = await active.provider.listTree(ctx)
-    for (const entry of tree) {
-      if (entry.type === 'file' && entry.path.startsWith(prefix)) {
-        await active.provider.deleteFile(ctx, entry.path)
+  return withWriteLock(async () => {
+    const active = activeVaultInstance()
+    if (!active) throw new Error('No vault connected')
+    const ctx = vaultCtxFor(active.id)
+    const prefix = `${path}/`
+    if (active.provider.deleteDir) {
+      await active.provider.deleteDir(ctx, path)
+    } else {
+      const tree = await active.provider.listTree(ctx)
+      for (const entry of tree) {
+        if (entry.type === 'file' && entry.path.startsWith(prefix)) {
+          await active.provider.deleteFile(ctx, entry.path)
+        }
       }
     }
-  }
-  if (openPath && (openPath === path || openPath.startsWith(prefix))) clearOpenFile()
+    if (openPath && (openPath === path || openPath.startsWith(prefix))) clearOpenFile()
+  })
+}
+
+/** Re-point the currently open file to a new path after a rename/move, keeping
+ *  it open with a fresh revision so subsequent saves target the new path. The
+ *  editor content is unchanged, so no reload/baseline juggling is needed. */
+async function repointOpenFile(to: string): Promise<void> {
+  const active = activeVaultInstance()
+  if (!active) return
+  const file = await active.provider.readFile(vaultCtxFor(active.id), to)
+  openPath = to
+  openSha = file.sha
+  lastSavedContent = file.content
+  setVaultOpenFile(to)
+}
+
+/** Rename/move a single file. Prefers the provider's `moveFile`; otherwise
+ *  read-writes-deletes (fine for the text files the tree shows). */
+export async function renameVaultFile(from: string, to: string): Promise<void> {
+  return withWriteLock(async () => {
+    await flushInternal().catch(() => {})
+    const active = activeVaultInstance()
+    if (!active) throw new Error('No vault connected')
+    const ctx = vaultCtxFor(active.id)
+    if (active.provider.moveFile) {
+      await active.provider.moveFile(ctx, from, to)
+    } else {
+      const file = await active.provider.readFile(ctx, from)
+      await active.provider.writeFile(ctx, to, file.content)
+      await active.provider.deleteFile(ctx, from)
+    }
+    if (openPath === from) await repointOpenFile(to)
+  })
+}
+
+/** Rename/move a folder and everything under it. Prefers the provider's
+ *  `moveDir` (which can carry files the tree hides); otherwise moves the
+ *  listed files one by one. */
+export async function renameVaultDir(from: string, to: string): Promise<void> {
+  return withWriteLock(async () => {
+    await flushInternal().catch(() => {})
+    const active = activeVaultInstance()
+    if (!active) throw new Error('No vault connected')
+    const ctx = vaultCtxFor(active.id)
+    const prefix = `${from}/`
+    if (active.provider.moveDir) {
+      await active.provider.moveDir(ctx, from, to)
+    } else {
+      const tree = await active.provider.listTree(ctx)
+      for (const entry of tree) {
+        if (entry.type === 'file' && entry.path.startsWith(prefix)) {
+          const dest = `${to}/${entry.path.slice(prefix.length)}`
+          const file = await active.provider.readFile(ctx, entry.path)
+          await active.provider.writeFile(ctx, dest, file.content)
+          await active.provider.deleteFile(ctx, entry.path)
+        }
+      }
+    }
+    if (openPath && openPath.startsWith(prefix)) {
+      await repointOpenFile(`${to}/${openPath.slice(prefix.length)}`)
+    }
+  })
 }

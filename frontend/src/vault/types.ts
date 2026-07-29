@@ -107,4 +107,12 @@ export interface VaultProvider {
    *  but that can't reach hidden files, so any provider that hides some (all of
    *  them today) must implement this to fully remove a folder. */
   deleteDir?: (ctx: VaultContext, path: string) => Promise<void>
+  /** Rename/move a single file from one path to another. Optional: lib/vault
+   *  falls back to read-write-delete (fine for the text files the tree shows). */
+  moveFile?: (ctx: VaultContext, from: string, to: string) => Promise<void>
+  /** Rename/move a directory (and everything under it, including hidden files)
+   *  from one path prefix to another. Optional, but — like deleteDir — a
+   *  provider that hides non-text files should implement it so a folder rename
+   *  brings those along too. */
+  moveDir?: (ctx: VaultContext, from: string, to: string) => Promise<void>
 }

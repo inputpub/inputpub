@@ -25,6 +25,15 @@ function headers(token: string) {
   }
 }
 
+/** GET a GitHub API URL, bypassing the browser's HTTP cache. GitHub sends
+ *  `Cache-Control: private, max-age=60` on authenticated reads, so a plain
+ *  fetch can hand back a stale ref/tree for up to a minute after a write — e.g.
+ *  the branch head right after a previous move, which then makes the next
+ *  move's ref update fail as a non-fast-forward. */
+function ghGet(url: string, token: string): Promise<Response> {
+  return fetch(url, { headers: headers(token), cache: 'no-store' })
+}
+
 function repoAndToken(ctx: VaultContext): { repo: string; token: string } {
   const token = (ctx.getConfig('token') ?? '').trim()
   const repo = (ctx.getConfig('repo') ?? '').trim()
@@ -36,7 +45,7 @@ function repoAndToken(ctx: VaultContext): { repo: string; token: string } {
 /** Resolves which branch to work against — the configured one, or the repo's
  *  default — and confirms the repo exists and is reachable with this token. */
 async function resolveBranch(ctx: VaultContext, repo: string, token: string): Promise<string> {
-  const res = await fetch(`https://api.github.com/repos/${repo}`, { headers: headers(token) })
+  const res = await ghGet(`https://api.github.com/repos/${repo}`, token)
   if (res.status === 404) {
     throw new Error(
       `Repository "${repo}" wasn't found. Create it on GitHub first, then check the name and that your token can access it.`,
@@ -54,6 +63,92 @@ function contentsUrl(repo: string, path: string, ref?: string): string {
     .map(encodeURIComponent)
     .join('/')}`
   return ref ? `${base}?ref=${encodeURIComponent(ref)}` : base
+}
+
+/**
+ * Rename/move a file or a whole directory in one commit via the Git Data API.
+ * `from` matches either an exact blob (file) or a path prefix (directory); the
+ * blobs are re-pointed to `to` by sha — never downloaded — so binary files
+ * (images, PDFs) move intact and the whole thing is a single atomic commit.
+ */
+async function gitMove(ctx: VaultContext, from: string, to: string): Promise<void> {
+  const { repo, token } = repoAndToken(ctx)
+  const branch = await resolveBranch(ctx, repo, token)
+  const h = headers(token)
+  const api = `https://api.github.com/repos/${repo}`
+  const ref = `heads/${encodeURIComponent(branch)}`
+  const prefix = `${from}/`
+  const destFor = (path: string) => (path === from ? to : `${to}/${path.slice(prefix.length)}`)
+
+  // The branch head can advance under us mid-move — most often the app's own
+  // autosave landing as a commit — which makes the ref update a non-fast-forward
+  // ("Update is not a fast forward"). Rebuild on the fresh head and retry rather
+  // than force-pushing (which would drop that concurrent commit).
+  for (let attempt = 0; ; attempt++) {
+    const refRes = await ghGet(`${api}/git/ref/${ref}`, token)
+    if (!refRes.ok) throw new Error(`Couldn't read the branch (${refRes.status})`)
+    const commitSha = ((await refRes.json()) as { object?: { sha?: string } }).object?.sha
+    if (!commitSha) throw new Error('Unexpected response reading the branch')
+
+    const commitRes = await ghGet(`${api}/git/commits/${commitSha}`, token)
+    if (!commitRes.ok) throw new Error(`Couldn't read the commit (${commitRes.status})`)
+    const baseTree = ((await commitRes.json()) as { tree?: { sha?: string } }).tree?.sha
+    if (!baseTree) throw new Error('Unexpected response reading the commit')
+
+    const treeRes = await ghGet(`${api}/git/trees/${baseTree}?recursive=1`, token)
+    if (!treeRes.ok) throw new Error(`Couldn't read the repo tree (${treeRes.status})`)
+    const tree = ((await treeRes.json()) as {
+      tree?: { path: string; type: string; mode: string; sha: string }[]
+    }).tree ?? []
+
+    const blobs = tree.filter((i) => i.type === 'blob')
+    const moving = blobs.filter((b) => b.path === from || b.path.startsWith(prefix))
+    if (moving.length === 0) throw new Error(`"${from}" wasn't found`)
+    const existing = new Set(blobs.map((b) => b.path))
+    for (const b of moving) {
+      if (existing.has(destFor(b.path))) throw new Error(`"${destFor(b.path)}" already exists`)
+    }
+
+    // Re-point each moved blob to its new path and drop the old one (sha: null).
+    // Every tree entry — including the deletion — must carry mode + type, or the
+    // create-tree API rejects it with "Must supply a valid tree.mode".
+    const changes = moving.flatMap((b) => [
+      { path: destFor(b.path), mode: b.mode, type: 'blob' as const, sha: b.sha },
+      { path: b.path, mode: b.mode, type: 'blob' as const, sha: null },
+    ])
+    const newTreeRes = await fetch(`${api}/git/trees`, {
+      method: 'POST',
+      headers: h,
+      body: JSON.stringify({ base_tree: baseTree, tree: changes }),
+    })
+    if (!newTreeRes.ok) {
+      const detail = await newTreeRes.text().catch(() => '')
+      throw new Error(`Rename failed (${newTreeRes.status})${detail ? `: ${detail.slice(0, 140)}` : ''}`)
+    }
+    const newTree = ((await newTreeRes.json()) as { sha?: string }).sha
+    if (!newTree) throw new Error('Unexpected response building the tree')
+
+    const message = moving.length === 1 && moving[0].path === from ? `Rename ${from} → ${to}` : `Rename ${from}/ → ${to}/`
+    const newCommitRes = await fetch(`${api}/git/commits`, {
+      method: 'POST',
+      headers: h,
+      body: JSON.stringify({ message, tree: newTree, parents: [commitSha] }),
+    })
+    if (!newCommitRes.ok) throw new Error(`Rename failed (${newCommitRes.status})`)
+    const newCommit = ((await newCommitRes.json()) as { sha?: string }).sha
+    if (!newCommit) throw new Error('Unexpected response creating the commit')
+
+    const patchRes = await fetch(`${api}/git/refs/${ref}`, {
+      method: 'PATCH',
+      headers: h,
+      body: JSON.stringify({ sha: newCommit }),
+    })
+    if (patchRes.ok) return
+    const detail = await patchRes.text().catch(() => '')
+    // Non-fast-forward means the head moved — rebuild on it and retry a few times.
+    if (patchRes.status === 422 && /fast.forward/i.test(detail) && attempt < 3) continue
+    throw new Error(`Rename failed (${patchRes.status})${detail ? `: ${detail.slice(0, 140)}` : ''}`)
+  }
 }
 
 /**
@@ -100,9 +195,9 @@ export const githubVault: VaultProvider = {
   async listTree(ctx) {
     const { repo, token } = repoAndToken(ctx)
     const branch = await resolveBranch(ctx, repo, token)
-    const res = await fetch(
+    const res = await ghGet(
       `https://api.github.com/repos/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
-      { headers: headers(token) },
+      token,
     )
     if (!res.ok) {
       const detail = await res.text().catch(() => '')
@@ -123,7 +218,7 @@ export const githubVault: VaultProvider = {
   async readFile(ctx, path) {
     const { repo, token } = repoAndToken(ctx)
     const branch = await resolveBranch(ctx, repo, token)
-    const res = await fetch(contentsUrl(repo, path, branch), { headers: headers(token) })
+    const res = await ghGet(contentsUrl(repo, path, branch), token)
     if (!res.ok) {
       const detail = await res.text().catch(() => '')
       throw new Error(`Couldn't load the file (${res.status})${detail ? `: ${detail.slice(0, 140)}` : ''}`)
@@ -163,7 +258,7 @@ export const githubVault: VaultProvider = {
     // The Contents API needs the file's *current* blob sha to delete it.
     // Look it up here rather than making callers cache one — a cached sha
     // goes stale the moment the file is edited, and GitHub then 409s.
-    const lookup = await fetch(contentsUrl(repo, path, branch), { headers: headers(token) })
+    const lookup = await ghGet(contentsUrl(repo, path, branch), token)
     if (!lookup.ok) {
       const detail = await lookup.text().catch(() => '')
       throw new Error(`Couldn't read the file (${lookup.status})${detail ? `: ${detail.slice(0, 140)}` : ''}`)
@@ -186,9 +281,9 @@ export const githubVault: VaultProvider = {
     // The tree lists *every* blob (not just the text files the sidebar shows),
     // so this also removes images/PDFs that would otherwise keep the folder
     // alive — git has no empty directories.
-    const res = await fetch(
+    const res = await ghGet(
       `https://api.github.com/repos/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
-      { headers: headers(token) },
+      token,
     )
     if (!res.ok) {
       const detail = await res.text().catch(() => '')
@@ -214,5 +309,13 @@ export const githubVault: VaultProvider = {
         )
       }
     }
+  },
+
+  async moveFile(ctx, from, to) {
+    await gitMove(ctx, from, to)
+  },
+
+  async moveDir(ctx, from, to) {
+    await gitMove(ctx, from, to)
   },
 }

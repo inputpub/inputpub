@@ -26,6 +26,36 @@ async function getDirForPath(
   return dir
 }
 
+/** FileSystemHandle.move() (rename/move on disk) isn't in the TS DOM lib yet. */
+type Movable = { move: (destination: FileSystemDirectoryHandle, name: string) => Promise<void> }
+
+async function moveHandle(
+  handle: FileSystemHandle,
+  destDir: FileSystemDirectoryHandle,
+  name: string,
+): Promise<void> {
+  const movable = handle as unknown as Partial<Movable>
+  if (typeof movable.move !== 'function') {
+    throw new Error('Renaming needs a newer Chromium browser (Chrome/Edge 123+)')
+  }
+  await movable.move(destDir, name)
+}
+
+/** Guard against silently overwriting an existing file/folder at the target. */
+async function assertAbsent(dir: FileSystemDirectoryHandle, name: string): Promise<void> {
+  try {
+    await dir.getFileHandle(name)
+  } catch {
+    try {
+      await dir.getDirectoryHandle(name)
+    } catch {
+      return // neither a file nor a folder by that name — free to use
+    }
+    throw new Error(`"${name}" already exists`)
+  }
+  throw new Error(`"${name}" already exists`)
+}
+
 /** Loads the instance's remembered folder handle and confirms read/write
  *  permission. Regaining permission after a reload needs a user gesture (a
  *  click), so this only succeeds silently if still considered granted. */
@@ -125,5 +155,28 @@ export const localFolderVault: VaultProvider = {
     // recursive removes the folder and everything under it (including non-text
     // files the tree doesn't list) in one call.
     await parent.removeEntry(name, { recursive: true })
+  },
+
+  async moveFile(ctx, from, to) {
+    const root = await getRootHandle(ctx.id)
+    const src = splitPath(from)
+    const dst = splitPath(to)
+    const srcDir = await getDirForPath(root, src.dir, false)
+    const handle = await srcDir.getFileHandle(src.name)
+    const dstDir = await getDirForPath(root, dst.dir, true)
+    await assertAbsent(dstDir, dst.name)
+    await moveHandle(handle, dstDir, dst.name)
+  },
+
+  async moveDir(ctx, from, to) {
+    const root = await getRootHandle(ctx.id)
+    const src = splitPath(from)
+    const dst = splitPath(to)
+    const parent = await getDirForPath(root, src.dir, false)
+    const handle = await parent.getDirectoryHandle(src.name)
+    const dstParent = await getDirForPath(root, dst.dir, true)
+    await assertAbsent(dstParent, dst.name)
+    // move() carries the whole subtree (including non-text files) intact.
+    await moveHandle(handle, dstParent, dst.name)
   },
 }

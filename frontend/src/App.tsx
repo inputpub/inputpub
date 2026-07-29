@@ -73,6 +73,10 @@ function App() {
   // Whether the next editor (re)mount should grab focus — set true when the
   // remount is from opening/creating a file, so the cursor lands ready to type.
   const [focusMount, setFocusMount] = useState(false)
+  // True while a vault file is being fetched (GitHub reads have real latency):
+  // the path switches to the new file immediately and the old content is
+  // cleared for a spinner, then swapped for the file once it arrives.
+  const [loadingFile, setLoadingFile] = useState(false)
 
   const [status, setStatus] = useState<ToastStatus | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -229,13 +233,21 @@ function App() {
 
   // Open a file from the vault sidebar into the editor. (openVaultFile
   // already flushes any pending edit on the previously open file first.)
+  // Switch the shown path and clear the old content up front (with a spinner),
+  // so a slow GitHub read doesn't leave the previous file lingering.
   async function openVaultPath(path: string) {
+    const prev = vaultPath
+    setVaultPath(path)
+    setLoadingFile(true)
     try {
       const content = await openVaultFile(path)
       showDocument(content, path, true)
       resetVaultSaveState()
     } catch (err) {
+      setVaultPath(prev) // load failed — the old document is still what's shown
       setStatus({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setLoadingFile(false)
     }
   }
 
@@ -249,6 +261,18 @@ function App() {
   // A file was deleted in the sidebar — if it was open, fall back to the draft.
   function onVaultFileDeleted(path: string) {
     if (vaultPath === path) showDocument(loadDraft(), undefined)
+  }
+
+  // A file or folder was renamed in the sidebar — if the open document is it
+  // (or lives under a renamed folder), re-point vaultPath so edits keep saving
+  // to the right place. The content is unchanged, so no editor remount.
+  function onVaultRenamed(from: string, to: string) {
+    setVaultPath((cur) => {
+      if (!cur) return cur
+      if (cur === from) return to
+      if (cur.startsWith(`${from}/`)) return `${to}/${cur.slice(from.length + 1)}`
+      return cur
+    })
   }
 
   // The active vault changed (connected, switched, reconfigured, or
@@ -379,6 +403,7 @@ function App() {
           onOpen={(path) => void openVaultPath(path)}
           onCreated={onVaultFileCreated}
           onDeleted={onVaultFileDeleted}
+          onRenamed={onVaultRenamed}
           onVaultChanged={onVaultChanged}
           onError={(text) => setStatus({ kind: 'error', text })}
         />
@@ -540,10 +565,23 @@ function App() {
           {vaultPath && (
             <div className="mb-3 flex items-center gap-2 text-[0.78rem] text-muted">
               <span className="truncate">{vaultPath}</span>
-              {/* A local-folder save is an instant disk write with nothing
-                  meaningful to report — only batched (e.g. GitHub) vaults,
-                  where a save can sit staged for a while, need this. */}
-              {activeVaultBatchesWrites() &&
+              {loadingFile ? (
+                <svg
+                  className="size-[0.85em] shrink-0 animate-spin opacity-70"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  aria-hidden="true"
+                >
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                </svg>
+              ) : (
+                /* A local-folder save is an instant disk write with nothing
+                   meaningful to report — only batched (e.g. GitHub) vaults,
+                   where a save can sit staged for a while, need this. */
+                activeVaultBatchesWrites() &&
                 (vaultSaveState === 'dirty' ? (
                   <button
                     type="button"
@@ -559,21 +597,26 @@ function App() {
                     {vaultSaveState === 'saved' && 'Saved'}
                     {vaultSaveState === 'error' && 'Save failed'}
                   </span>
-                ))}
+                )))}
             </div>
           )}
-          <Editor
-            key={editorKey}
-            ref={editorRef}
-            defaultValue={seed}
-            autoFocus={focusMount}
-            onChange={onEditorChange}
-            onImageUploadUnconfigured={() => setImageChoiceOpen(true)}
-            onImageUploadError={(text) => setStatus({ kind: 'error', text })}
-            onAiUnconfigured={() => setAiProviderOpen(true)}
-            onAiError={(text) => setStatus({ kind: 'error', text })}
-            onEditPrompts={() => setAiPromptsOpen(true)}
-          />
+          {loadingFile ? (
+            // Old content cleared; the spinner beside the path shows progress.
+            <div className="flex-1" />
+          ) : (
+            <Editor
+              key={editorKey}
+              ref={editorRef}
+              defaultValue={seed}
+              autoFocus={focusMount}
+              onChange={onEditorChange}
+              onImageUploadUnconfigured={() => setImageChoiceOpen(true)}
+              onImageUploadError={(text) => setStatus({ kind: 'error', text })}
+              onAiUnconfigured={() => setAiProviderOpen(true)}
+              onAiError={(text) => setStatus({ kind: 'error', text })}
+              onEditPrompts={() => setAiPromptsOpen(true)}
+            />
+          )}
         </div>
       </main>
 

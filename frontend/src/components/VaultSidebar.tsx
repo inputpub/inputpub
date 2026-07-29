@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { vaultProviders, vaultNs, type VaultEntry, type VaultProvider } from '../vault'
 import { getConfig, setConfig } from '../lib/storage'
 import {
@@ -7,6 +7,8 @@ import {
   createVaultFile,
   deleteVaultDir,
   deleteVaultFile,
+  renameVaultDir,
+  renameVaultFile,
   disconnectVault,
   generateVaultInstanceId,
   isVaultConnected,
@@ -17,7 +19,7 @@ import {
   vaultCtxFor,
   type VaultInstance,
 } from '../lib/vault'
-import { CheckIcon, DocumentIcon, FolderIcon, GearIcon, PlusIcon, TrashIcon } from '../destinations/icons'
+import { CheckIcon, DocumentIcon, EditIcon, FolderIcon, GearIcon, PlusIcon, TrashIcon } from '../destinations/icons'
 import { Field } from './Field'
 import { Menu, MenuDivider, MenuItem } from './Menu'
 import { useDismiss } from '../lib/useDismiss'
@@ -90,6 +92,63 @@ interface CreateState {
   onRequest: (parentPath: string) => void
 }
 
+/** The rename-a-node interaction, threaded down the tree so any row can turn
+ *  its label into an edit field. `targetPath` is the node being renamed. */
+interface RenameState {
+  targetPath: string | null
+  value: string
+  onChange: (value: string) => void
+  onSubmit: () => void
+  onCancel: () => void
+  onRequest: (node: TreeNode) => void
+}
+
+/** The drag-to-move interaction, threaded down the tree. Rows are drag sources;
+ *  folder rows (and the root area) are drop targets. `overPath` is the folder
+ *  currently hovered ('' = root), for highlighting. */
+interface DragState {
+  draggingPath: string | null
+  overPath: string | null
+  onStart: (node: TreeNode) => void
+  onEnd: () => void
+  canDrop: (folderPath: string) => boolean
+  onOver: (folderPath: string) => void
+  onDrop: (folderPath: string) => void
+}
+
+/** Inline edit field shown in place of a row's name while renaming it. Stops
+ *  click/key events from reaching the row (which would open a file or toggle a
+ *  folder). Selecting on focus lets the user just retype. */
+function RenameInput({
+  value,
+  onChange,
+  onSubmit,
+  onCancel,
+}: {
+  value: string
+  onChange: (value: string) => void
+  onSubmit: () => void
+  onCancel: () => void
+}) {
+  return (
+    <input
+      autoFocus
+      className="min-w-0 flex-1 rounded border border-accent bg-bg px-[0.25rem] py-0 text-[0.84rem] text-inherit focus:outline-none"
+      value={value}
+      onFocus={(e) => e.target.select()}
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => {
+        e.stopPropagation()
+        if (e.key === 'Enter') onSubmit()
+        else if (e.key === 'Escape') onCancel()
+      }}
+      onBlur={onCancel}
+    />
+  )
+}
+
 /** The inline "name a new file" input — shown at the tree root, or nested in a
  *  folder once its + is clicked (in which case only the filename is typed and
  *  the folder path is prepended on submit). */
@@ -129,6 +188,8 @@ function Row({
   depth,
   currentPath,
   create,
+  rename,
+  drag,
   onOpen,
   onDelete,
 }: {
@@ -136,9 +197,24 @@ function Row({
   depth: number
   currentPath: string | undefined
   create: CreateState
+  rename: RenameState
+  drag: DragState
   onOpen: (path: string) => void
   onDelete: (node: TreeNode) => void
 }) {
+  const renaming = rename.targetPath === node.path
+  // Shared drag-source handlers for both file and folder rows. Disabled while
+  // renaming so the inline input's text selection works normally.
+  const dragSource = {
+    draggable: !renaming,
+    onDragStart: (e: DragEvent) => {
+      e.stopPropagation()
+      e.dataTransfer.effectAllowed = 'move'
+      e.dataTransfer.setData('text/plain', node.path)
+      drag.onStart(node)
+    },
+    onDragEnd: () => drag.onEnd(),
+  }
   // Collapsed by default to keep the tree tidy; a folder starts open only when
   // it's on the path to the file currently loaded in the editor, so the active
   // file stays visible after a reload.
@@ -151,9 +227,26 @@ function Row({
   const indent = { paddingLeft: `${0.4 + depth * 1.6}rem` }
 
   if (node.type === 'dir') {
+    const dropActive = drag.overPath === node.path
     return (
       <div>
-        <div className={rowCls} style={indent} onClick={() => setOpen((o) => !o)}>
+        <div
+          className={`${rowCls} ${dropActive ? 'bg-accent/15 ring-1 ring-accent/60' : ''}`}
+          style={indent}
+          onClick={() => setOpen((o) => !o)}
+          {...dragSource}
+          onDragOver={(e) => {
+            if (!drag.canDrop(node.path)) return
+            e.preventDefault()
+            e.stopPropagation()
+            drag.onOver(node.path)
+          }}
+          onDrop={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            drag.onDrop(node.path)
+          }}
+        >
           <svg
             className={`size-[0.8em] shrink-0 opacity-45 transition-transform duration-150 ${open ? 'rotate-90' : ''}`}
             viewBox="0 0 24 24"
@@ -167,30 +260,52 @@ function Row({
             <path d="M9 6l6 6-6 6" />
           </svg>
           <span className={iconCls}>{FolderIcon}</span>
-          <span className="min-w-0 flex-1 truncate">{node.name}</span>
-          <button
-            type="button"
-            className="ml-auto hidden shrink-0 rounded p-[0.15rem] text-muted opacity-70 hover:bg-line hover:text-text hover:opacity-100 group-hover:inline-flex [&_svg]:block [&_svg]:size-[0.85em]"
-            title="New file in this folder"
-            onClick={(e) => {
-              e.stopPropagation()
-              setOpen(true)
-              create.onRequest(node.path)
-            }}
-          >
-            {PlusIcon}
-          </button>
-          <button
-            type="button"
-            className="hidden shrink-0 rounded p-[0.15rem] text-muted opacity-70 hover:bg-line hover:text-text hover:opacity-100 group-hover:inline-flex [&_svg]:block [&_svg]:size-[0.85em]"
-            title="Delete folder"
-            onClick={(e) => {
-              e.stopPropagation()
-              onDelete(node)
-            }}
-          >
-            {TrashIcon}
-          </button>
+          {renaming ? (
+            <RenameInput
+              value={rename.value}
+              onChange={rename.onChange}
+              onSubmit={rename.onSubmit}
+              onCancel={rename.onCancel}
+            />
+          ) : (
+            <>
+              <span className="min-w-0 flex-1 truncate">{node.name}</span>
+              <button
+                type="button"
+                className="ml-auto hidden shrink-0 rounded p-[0.15rem] text-muted opacity-70 hover:bg-line hover:text-text hover:opacity-100 group-hover:inline-flex [&_svg]:block [&_svg]:size-[0.85em]"
+                title="New file in this folder"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setOpen(true)
+                  create.onRequest(node.path)
+                }}
+              >
+                {PlusIcon}
+              </button>
+              <button
+                type="button"
+                className="hidden shrink-0 rounded p-[0.15rem] text-muted opacity-70 hover:bg-line hover:text-text hover:opacity-100 group-hover:inline-flex [&_svg]:block [&_svg]:size-[0.85em]"
+                title="Rename folder"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  rename.onRequest(node)
+                }}
+              >
+                {EditIcon}
+              </button>
+              <button
+                type="button"
+                className="hidden shrink-0 rounded p-[0.15rem] text-muted opacity-70 hover:bg-line hover:text-text hover:opacity-100 group-hover:inline-flex [&_svg]:block [&_svg]:size-[0.85em]"
+                title="Delete folder"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDelete(node)
+                }}
+              >
+                {TrashIcon}
+              </button>
+            </>
+          )}
         </div>
         {open && (
           <div>
@@ -212,6 +327,8 @@ function Row({
                 depth={depth + 1}
                 currentPath={currentPath}
                 create={create}
+                rename={rename}
+                drag={drag}
                 onOpen={onOpen}
                 onDelete={onDelete}
               />
@@ -226,21 +343,44 @@ function Row({
     <div
       className={`${rowCls} ${currentPath === node.path ? 'bg-hover' : ''}`}
       style={indent}
-      onClick={() => onOpen(node.path)}
+      onClick={() => (renaming ? undefined : onOpen(node.path))}
+      {...dragSource}
     >
       <span className={iconCls}>{DocumentIcon}</span>
-      <span className="min-w-0 flex-1 truncate">{node.name}</span>
-      <button
-        type="button"
-        className="ml-auto hidden shrink-0 rounded p-[0.15rem] text-muted opacity-70 hover:bg-line hover:text-text hover:opacity-100 group-hover:inline-flex [&_svg]:block [&_svg]:size-[0.85em]"
-        title="Delete file"
-        onClick={(e) => {
-          e.stopPropagation()
-          onDelete(node)
-        }}
-      >
-        {TrashIcon}
-      </button>
+      {renaming ? (
+        <RenameInput
+          value={rename.value}
+          onChange={rename.onChange}
+          onSubmit={rename.onSubmit}
+          onCancel={rename.onCancel}
+        />
+      ) : (
+        <>
+          <span className="min-w-0 flex-1 truncate">{node.name}</span>
+          <button
+            type="button"
+            className="ml-auto hidden shrink-0 rounded p-[0.15rem] text-muted opacity-70 hover:bg-line hover:text-text hover:opacity-100 group-hover:inline-flex [&_svg]:block [&_svg]:size-[0.85em]"
+            title="Rename file"
+            onClick={(e) => {
+              e.stopPropagation()
+              rename.onRequest(node)
+            }}
+          >
+            {EditIcon}
+          </button>
+          <button
+            type="button"
+            className="hidden shrink-0 rounded p-[0.15rem] text-muted opacity-70 hover:bg-line hover:text-text hover:opacity-100 group-hover:inline-flex [&_svg]:block [&_svg]:size-[0.85em]"
+            title="Delete file"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete(node)
+            }}
+          >
+            {TrashIcon}
+          </button>
+        </>
+      )}
     </div>
   )
 }
@@ -379,6 +519,7 @@ export function VaultSidebar({
   onOpen,
   onCreated,
   onDeleted,
+  onRenamed,
   onVaultChanged,
   onError,
 }: {
@@ -386,6 +527,9 @@ export function VaultSidebar({
   onOpen: (path: string) => void
   onCreated: (path: string) => void
   onDeleted: (path: string) => void
+  /** Called after a file/folder is renamed, with the old and new paths, so the
+   *  caller can re-point the open document if it (or its folder) moved. */
+  onRenamed: (from: string, to: string) => void
   /** Called whenever the active vault binding changes (connected, switched,
    *  reconfigured, or disconnected) — any previously open file may no longer
    *  belong to it, so the caller should drop back to the local draft. */
@@ -417,6 +561,13 @@ export function VaultSidebar({
   // isn't instant), then a done state briefly after, since the affected row may
   // vanish (delete) or scroll out (create).
   const [deleting, setDeleting] = useState(false)
+  // The node currently being renamed (its row shows an inline edit field).
+  const [renameTarget, setRenameTarget] = useState<TreeNode | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  // Drag-and-drop move: the node being dragged, and the folder path currently
+  // hovered as a drop target ('' = tree root, null = none).
+  const [dragNode, setDragNode] = useState<TreeNode | null>(null)
+  const [dragOver, setDragOver] = useState<string | null>(null)
   const [opMsg, setOpMsg] = useState<{ text: string; done: boolean } | null>(null)
   const opMsgTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const switcherRef = useRef<HTMLDivElement>(null)
@@ -454,12 +605,87 @@ export function VaultSidebar({
   const tree = useMemo(() => (entries ? buildTree(entries) : []), [entries])
 
   const startCreate = (parent: string) => {
+    setRenameTarget(null)
     setCreateParent(parent)
     setNewPath('')
   }
   const cancelCreate = () => {
     setCreateParent(null)
     setNewPath('')
+  }
+
+  const startRename = (node: TreeNode) => {
+    setCreateParent(null)
+    setRenameTarget(node)
+    setRenameValue(node.name)
+  }
+  const cancelRename = () => {
+    setRenameTarget(null)
+    setRenameValue('')
+  }
+
+  // Move/rename a node to `dest` (both are path changes — a rename keeps the
+  // parent, a move changes it). Shared by the rename editor and drag-and-drop.
+  async function moveNode(target: TreeNode, dest: string, progress: string, done: string) {
+    if (!dest || dest === target.path || deleting) return
+    const prefix = `${target.path}/`
+    setDeleting(true)
+    setOpMsg({ text: progress, done: false })
+    try {
+      if (target.type === 'dir') await renameVaultDir(target.path, dest)
+      else await renameVaultFile(target.path, dest)
+      setEntries((prev) => {
+        if (!prev) return prev
+        return prev.map((e) => {
+          if (e.path === target.path) return { ...e, path: dest }
+          if (e.path.startsWith(prefix)) return { ...e, path: `${dest}/${e.path.slice(prefix.length)}` }
+          return e
+        })
+      })
+      onRenamed(target.path, dest)
+      flashDone(done)
+    } catch (err) {
+      setOpMsg(null)
+      onError(err instanceof Error ? err.message : String(err))
+      // Can fail partway (fallback path) — resync to what's really there.
+      refresh()
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  async function submitRename() {
+    const target = renameTarget
+    const name = renameValue.trim()
+    if (!target || !name) return
+    const slash = target.path.lastIndexOf('/')
+    const parentDir = slash === -1 ? '' : target.path.slice(0, slash)
+    let dest = parentDir ? `${parentDir}/${name}` : name
+    // Keep files as Markdown even if the user drops the extension while editing.
+    if (target.type === 'file' && !/\.md$/i.test(dest)) dest += '.md'
+    cancelRename()
+    await moveNode(target, dest, `Renaming ${target.name} → ${name}…`, `Renamed to ${dest.split('/').pop()}`)
+  }
+
+  // Drop a dragged node into a folder ('' = tree root): move it there under its
+  // own name. Guards against dropping a folder into itself/a descendant and
+  // against a no-op move into its current parent.
+  function canDropInto(folderPath: string): boolean {
+    const n = dragNode
+    if (!n) return false
+    if (n.type === 'dir' && (folderPath === n.path || folderPath.startsWith(`${n.path}/`))) return false
+    const slash = n.path.lastIndexOf('/')
+    const parentDir = slash === -1 ? '' : n.path.slice(0, slash)
+    return parentDir !== folderPath
+  }
+  function dropInto(folderPath: string) {
+    const n = dragNode
+    const ok = canDropInto(folderPath)
+    setDragNode(null)
+    setDragOver(null)
+    if (!n || !ok) return
+    const dest = folderPath ? `${folderPath}/${n.name}` : n.name
+    void moveNode(n, dest, `Moving ${n.name}…`, `Moved ${n.name}`)
   }
 
   async function submitCreate() {
@@ -609,6 +835,28 @@ export function VaultSidebar({
     onRequest: startCreate,
   }
 
+  const rename: RenameState = {
+    targetPath: renameTarget?.path ?? null,
+    value: renameValue,
+    onChange: setRenameValue,
+    onSubmit: () => void submitRename(),
+    onCancel: cancelRename,
+    onRequest: startRename,
+  }
+
+  const drag: DragState = {
+    draggingPath: dragNode?.path ?? null,
+    overPath: dragOver,
+    onStart: setDragNode,
+    onEnd: () => {
+      setDragNode(null)
+      setDragOver(null)
+    },
+    canDrop: canDropInto,
+    onOver: (folderPath) => setDragOver((cur) => (cur === folderPath ? cur : folderPath)),
+    onDrop: dropInto,
+  }
+
   return (
     // Floats beside the sheet's left edge rather than hugging the viewport —
     // its position is derived from the same --sheet-max / --page-pad vars the
@@ -708,7 +956,20 @@ export function VaultSidebar({
           )}
         </div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto p-[0.4rem]">
+        <div
+          className={`min-h-0 flex-1 overflow-y-auto p-[0.4rem] ${dragOver === '' ? 'bg-accent/10 ring-1 ring-inset ring-accent/50' : ''}`}
+          onDragOver={(e) => {
+            // Empty area (and non-folder rows) = drop into the tree root. Folder
+            // rows stop propagation, so this only fires when not over a folder.
+            if (!drag.canDrop('')) return
+            e.preventDefault()
+            drag.onOver('')
+          }}
+          onDrop={(e) => {
+            e.preventDefault()
+            drag.onDrop('')
+          }}
+        >
           {opMsg && (
             <div className="mb-[0.3rem] flex items-center gap-[0.4rem] px-[0.4rem] py-[0.3rem] text-[0.78rem] text-muted">
               {opMsg.done ? (
@@ -768,6 +1029,8 @@ export function VaultSidebar({
                 depth={0}
                 currentPath={currentPath}
                 create={create}
+                rename={rename}
+                drag={drag}
                 onOpen={onOpen}
                 onDelete={handleDelete}
               />
