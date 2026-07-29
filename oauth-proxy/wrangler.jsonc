@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "inputpub-oauth-proxy",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-06-01",
+  // Serve the Worker from a branded subdomain instead of *.workers.dev.
+  // Requires inputpub.com to be a Cloudflare zone (it is); Cloudflare creates
+  // the DNS record + cert automatically on deploy.
+  "routes": [{ "pattern": "oauth.inputpub.com", "custom_domain": true }],
+  // Public, non-secret config. The two GitHub secrets are set out-of-band with
+  //   wrangler secret put GITHUB_CLIENT_ID
+  //   wrangler secret put GITHUB_CLIENT_SECRET
+  // (client id isn't really secret, but keeping both together is simplest).
+  "vars": {
+    "ALLOWED_ORIGINS": "https://inputpub.com,http://localhost:5173"
+  }
+}

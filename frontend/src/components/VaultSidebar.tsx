@@ -814,6 +814,15 @@ export function VaultSidebar({
     onVaultChanged()
   }
 
+  // For providers with a custom ConnectForm: it writes the config itself, then
+  // calls this to register + activate the instance and switch to browsing.
+  async function completeConnect() {
+    if (!configTarget) return
+    registerVaultInstance(configTarget.provider.id, configTarget.id)
+    await connectVault(configTarget.id)
+    handleConnected()
+  }
+
   const connected = isVaultConnected()
   const active = activeVaultInstance()
   const instances = listVaultInstances()
@@ -936,13 +945,23 @@ export function VaultSidebar({
         </div>
       ) : view === 'configure' && configTarget ? (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <ConfigureForm
-            key={configTarget.id}
-            target={configTarget}
-            onCancel={configureCancel}
-            cancelLabel={connected ? 'Cancel' : 'Back'}
-            onConnected={handleConnected}
-          />
+          {configTarget.provider.ConnectForm ? (
+            <configTarget.provider.ConnectForm
+              key={configTarget.id}
+              ctx={vaultCtxFor(configTarget.id)}
+              onComplete={completeConnect}
+              onCancel={configureCancel}
+              cancelLabel={connected ? 'Cancel' : 'Back'}
+            />
+          ) : (
+            <ConfigureForm
+              key={configTarget.id}
+              target={configTarget}
+              onCancel={configureCancel}
+              cancelLabel={connected ? 'Cancel' : 'Back'}
+              onConnected={handleConnected}
+            />
+          )}
           {isConfiguringActive && connected && (
             <div className="mt-[0.5rem] border-t border-line px-[0.7rem] pb-[0.7rem] pt-[0.9rem]">
               <button

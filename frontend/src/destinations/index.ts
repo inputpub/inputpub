@@ -6,8 +6,6 @@ import { chatgpt } from './chatgpt'
 import { claude } from './claude'
 import { gemini } from './gemini'
 import { email } from './email'
-import { github } from './github'
-import { githubGist } from './github-gist'
 import { v2ex } from './v2ex'
 import { wechat } from './wechat'
 
@@ -16,8 +14,6 @@ export const destinations: Destination[] = [
   x,
   reddit,
   hackernews,
-  github,
-  githubGist,
   email,
   chatgpt,
   claude,

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Connecting to GitHub…</title>
+    <style>
+      body {
+        font: 15px/1.5 system-ui, sans-serif;
+        display: grid;
+        place-items: center;
+        min-height: 100vh;
+        margin: 0;
+        color: #555;
+      }
+      @media (prefers-color-scheme: dark) {
+        body { background: #111; color: #aaa; }
+      }
+    </style>
+  </head>
+  <body>
+    <p>Connecting to GitHub…</p>
+    <script>
+      // The OAuth popup lands here with ?code=…&state=…; hand both back to the
+      // app window and close. The app (same origin) does the token exchange.
+      var p = new URLSearchParams(location.search)
+      var msg = {
+        source: 'inputpub-oauth',
+        code: p.get('code'),
+        state: p.get('state'),
+        installationId: p.get('installation_id'),
+        error: p.get('error_description') || p.get('error'),
+      }
+      if (window.opener) {
+        window.opener.postMessage(msg, location.origin)
+        window.close()
+      } else {
+        document.body.textContent = 'You can close this window and return to Input Pub.'
+      }
+    </script>
+  </body>
+</html>

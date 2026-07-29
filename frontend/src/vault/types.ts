@@ -49,6 +49,18 @@ export class VaultConflictError extends Error {}
 /** Files shown in a vault tree — the editor only handles text/Markdown. */
 export const TEXT_EXT = /\.(md|markdown|mdx|txt)$/i
 
+/** Props a provider's custom connect UI receives (see `ConnectForm`). */
+export interface VaultConnectProps {
+  /** Read/write this instance's config namespace. */
+  ctx: VaultContext
+  /** Call once the instance is configured enough to use — the host registers
+   *  and activates it, then switches to the file browser. */
+  onComplete: () => void | Promise<void>
+  /** Back out of the form (omit to hide the button). */
+  onCancel?: () => void
+  cancelLabel?: string
+}
+
 export interface VaultProvider {
   /** Stable id for this provider *type* (e.g. "github") — shared by every
    *  instance connected through it. */
@@ -66,6 +78,10 @@ export interface VaultProvider {
   /** Fields to configure before this provider can be connected. Leave empty
    *  for providers that connect via `connect` instead (e.g. a native picker). */
   config: ConfigField[]
+  /** Optional custom connect UI, rendered in place of the generic field form —
+   *  e.g. an OAuth "Login with …" flow plus a resource picker. It writes the
+   *  same config keys the provider reads, then calls `onComplete`. */
+  ConnectForm?: (props: VaultConnectProps) => ReactNode
   /** Set when a write has a real cost (e.g. a GitHub save is a commit), so
    *  edits are batched into occasional checkpoint saves and the UI shows an
    *  Unsaved/Saving/Saved indicator. Leave unset for cheap writes (e.g. a

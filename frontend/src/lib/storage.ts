@@ -6,6 +6,7 @@ const VAULT_INSTANCES_KEY = 'inputpub.vault.instances'
 const VAULT_ACTIVE_KEY = 'inputpub.vault.active'
 const VAULT_OPEN_FILE_KEY = 'inputpub.vault.openFile'
 const VAULT_SIDEBAR_KEY = 'inputpub.vault.sidebarOpen'
+const GITHUB_LOGIN_KEY = 'inputpub.github.login'
 
 export function loadDraft(): string {
   try {
@@ -265,6 +266,35 @@ export function getVaultSidebarOpen(): boolean | undefined {
 export function setVaultSidebarOpen(open: boolean): void {
   try {
     localStorage.setItem(VAULT_SIDEBAR_KEY, open ? '1' : '0')
+  } catch {
+    /* storage unavailable — ignore */
+  }
+}
+
+/** The GitHub token from the last connection, shared across GitHub vault
+ *  instances so adding another vault reuses the same login instead of popping
+ *  the install flow again. Only the token is kept — what it can access (its
+ *  repos/scope) is fetched live each time, never cached. Per-instance config
+ *  still holds its own copy of the token, so instances stay independent. */
+export function getGithubToken(): string | undefined {
+  try {
+    return localStorage.getItem(GITHUB_LOGIN_KEY) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+export function setGithubToken(token: string): void {
+  try {
+    localStorage.setItem(GITHUB_LOGIN_KEY, token)
+  } catch {
+    /* storage unavailable — ignore */
+  }
+}
+
+export function clearGithubToken(): void {
+  try {
+    localStorage.removeItem(GITHUB_LOGIN_KEY)
   } catch {
     /* storage unavailable — ignore */
   }

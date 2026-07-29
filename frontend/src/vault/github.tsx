@@ -1,7 +1,7 @@
 import type { VaultContext, VaultEntry, VaultProvider } from './types'
 import { TEXT_EXT, VaultConflictError } from './types'
 import { GitHubIcon } from '../destinations/icons'
-import { githubRepoTokenHint } from '../components/githubTokenHint'
+import { GithubConnect } from './GithubConnect'
 
 /** Encode a UTF-8 string to base64 (btoa alone breaks on non-Latin1, e.g. CJK). */
 function toBase64(text: string): string {
@@ -17,7 +17,7 @@ function fromBase64(b64: string): string {
   return new TextDecoder().decode(bytes)
 }
 
-function headers(token: string) {
+export function headers(token: string) {
   return {
     Authorization: `Bearer ${token}`,
     Accept: 'application/vnd.github+json',
@@ -30,7 +30,7 @@ function headers(token: string) {
  *  fetch can hand back a stale ref/tree for up to a minute after a write — e.g.
  *  the branch head right after a previous move, which then makes the next
  *  move's ref update fail as a non-fast-forward. */
-function ghGet(url: string, token: string): Promise<Response> {
+export function ghGet(url: string, token: string): Promise<Response> {
   return fetch(url, { headers: headers(token), cache: 'no-store' })
 }
 
@@ -171,7 +171,6 @@ export const githubVault: VaultProvider = {
       label: 'GitHub Token',
       type: 'password',
       placeholder: 'github_pat_…',
-      hint: githubRepoTokenHint,
     },
     {
       key: 'repo',
@@ -187,6 +186,8 @@ export const githubVault: VaultProvider = {
       hint: 'Saves are commits, so edits are batched into one commit per pause instead of one per keystroke.',
     },
   ],
+
+  ConnectForm: GithubConnect,
 
   label(ctx) {
     return ctx.getConfig('repo')?.trim() || undefined
