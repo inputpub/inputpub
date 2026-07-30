@@ -19,7 +19,7 @@ import {
   vaultCtxFor,
   type VaultInstance,
 } from '../lib/vault'
-import { CheckIcon, DocumentIcon, EditIcon, FolderIcon, GearIcon, PlusIcon, TrashIcon } from '../destinations/icons'
+import { CheckIcon, EditIcon, GearIcon, PlusIcon, TrashIcon } from '../destinations/icons'
 import { Field } from './Field'
 import { Menu, MenuDivider, MenuItem } from './Menu'
 import { useDismiss } from '../lib/useDismiss'
@@ -70,7 +70,7 @@ function buildTree(entries: VaultEntry[]): TreeNode[] {
 }
 
 const rowCls =
-  'group flex w-full cursor-pointer items-center gap-[0.4rem] rounded-md px-[0.4rem] py-[0.3rem] text-left text-[0.84rem] hover:bg-hover'
+  'group flex w-full cursor-pointer items-center gap-[0.4rem] rounded-md px-[0.4rem] py-[0.3rem] text-left text-[0.84rem] hover:text-text hover:bg-hover'
 const iconCls =
   'inline-flex w-[1.1rem] shrink-0 items-center justify-center text-[0.95rem] [&_svg]:block [&_svg]:size-[1em]'
 
@@ -221,17 +221,16 @@ function Row({
   const [open, setOpen] = useState(
     () => !!currentPath && currentPath.startsWith(`${node.path}/`),
   )
-  // A folder's own chevron+icon already push its glyph ~1.5rem in, so a child
-  // needs more than that per level or its icon lands in the same column as its
-  // parent's, making folders and files hard to tell apart at a glance.
-  const indent = { paddingLeft: `${0.4 + depth * 1.6}rem` }
+  // Each level steps in ~1rem — roughly the folder chevron's width — so a
+  // child's name clears its parent's without wasting horizontal space.
+  const indent = { paddingLeft: `${0.4 + depth * 1}rem` }
 
   if (node.type === 'dir') {
     const dropActive = drag.overPath === node.path
     return (
       <div>
         <div
-          className={`${rowCls} ${dropActive ? 'bg-accent/15 ring-1 ring-accent/60' : ''}`}
+          className={`${rowCls} text-muted ${dropActive ? 'bg-accent/15 ring-1 ring-accent/60' : ''}`}
           style={indent}
           onClick={() => setOpen((o) => !o)}
           {...dragSource}
@@ -259,7 +258,6 @@ function Row({
           >
             <path d="M9 6l6 6-6 6" />
           </svg>
-          <span className={iconCls}>{FolderIcon}</span>
           {renaming ? (
             <RenameInput
               value={rename.value}
@@ -310,7 +308,7 @@ function Row({
         {open && (
           <div>
             {create.parent === node.path && (
-              <div style={{ paddingLeft: `${0.4 + (depth + 1) * 1.6}rem` }}>
+              <div style={{ paddingLeft: `${0.4 + (depth + 1) * 1}rem` }}>
                 <NewFileInput
                   value={create.value}
                   placeholder="new-file.md"
@@ -341,12 +339,13 @@ function Row({
 
   return (
     <div
-      className={`${rowCls} ${currentPath === node.path ? 'bg-hover' : ''}`}
+      className={`${rowCls} ${currentPath === node.path ? 'font-medium text-text' : 'text-muted'}`}
       style={indent}
       onClick={() => (renaming ? undefined : onOpen(node.path))}
       {...dragSource}
     >
-      <span className={iconCls}>{DocumentIcon}</span>
+      {/* Spacer matching the folder chevron, so file names line up with folder names. */}
+      <span className="size-[0.8em] shrink-0" aria-hidden="true" />
       {renaming ? (
         <RenameInput
           value={rename.value}
@@ -870,21 +869,33 @@ export function VaultSidebar({
     // Floats beside the sheet's left edge rather than hugging the viewport —
     // its position is derived from the same --sheet-max / --page-pad vars the
     // sheet and top bar use, so it tracks the sheet as the window resizes.
-    // Below ~16rem of clearance (narrow windows) it clamps to --page-pad from
+    // Below ~14rem of clearance (narrow windows) it clamps to --page-pad from
     // the viewport edge instead of overlapping the sheet.
-    <div className="fixed top-16 bottom-4 z-30 flex w-60 flex-col border border-line bg-surface shadow left-[max(var(--page-pad),calc(50%-var(--sheet-max)/2-16rem))]">
-      <div className="flex items-center gap-[0.3rem] border-b border-line px-[0.6rem] py-[0.55rem]">
+    //
+    // Background: bg-backdrop matches the canvas, so on wide screens the tree
+    // reads as bare text floating in the gutter — but it's opaque, so once the
+    // window narrows enough to overlap the sheet, it occludes the text behind
+    // it instead of bleeding through. At that point (~1340px) it also takes a
+    // border + shadow so it reads as a deliberate docked panel, not a stray box.
+    <div className="fixed top-16 bottom-4 z-30 flex w-52 flex-col bg-backdrop left-[max(var(--page-pad),calc(50%-var(--sheet-max)/2-13.5rem))] max-[1340px]:border max-[1340px]:border-line max-[1340px]:bg-surface max-[1340px]:shadow">
+      <div className="group flex items-center gap-[0.3rem] px-[0.6rem] py-[0.55rem]">
         <div className="relative min-w-0 flex-1" ref={switcherRef}>
           <button
             type="button"
-            className="flex w-full cursor-pointer items-center gap-1 rounded-md py-[0.1rem] text-left text-[0.82rem] font-medium text-muted hover:text-text"
+            className="flex w-full cursor-pointer items-center gap-1 rounded-md py-[0.1rem] text-left text-[0.92rem] font-medium leading-none text-muted hover:text-text"
             aria-haspopup="menu"
             aria-expanded={switcherOpen}
             onClick={() => setSwitcherOpen((o) => !o)}
           >
-            <span className="truncate">{active ? instanceLabel(active) : 'Connect a vault'}</span>
+            {/* Nudged up 1px: the glyph's optical center sits a hair below the
+                icons' geometric center, so left as-is the text reads low. */}
+            <span className="-translate-y-px truncate">
+              {active ? instanceLabel(active) : 'Connect a vault'}
+            </span>
+            {/* Up/down chevrons — the "switcher / selector" affordance, kept
+                visually distinct from the folder rows' single expand chevron. */}
             <svg
-              className={`size-[0.7em] shrink-0 opacity-60 transition-transform duration-150 ${switcherOpen ? 'rotate-180' : ''}`}
+              className="size-[0.85em] shrink-0"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -893,7 +904,8 @@ export function VaultSidebar({
               strokeLinejoin="round"
               aria-hidden="true"
             >
-              <path d="M6 9l6 6 6-6" />
+              <path d="m7 15 5 5 5-5" />
+              <path d="m7 9 5-5 5 5" />
             </svg>
           </button>
           {switcherOpen && (
@@ -921,7 +933,7 @@ export function VaultSidebar({
           <>
             <button
               type="button"
-              className="inline-flex cursor-pointer items-center justify-center rounded-md p-[0.3rem] text-muted hover:bg-hover hover:text-text [&_svg]:block [&_svg]:size-[0.95em]"
+              className="invisible inline-flex shrink-0 cursor-pointer items-center justify-center rounded p-[0.15rem] text-muted opacity-70 hover:bg-line hover:text-text hover:opacity-100 group-hover:visible [&_svg]:block [&_svg]:size-[0.85em]"
               title="New file"
               onClick={() => startCreate('')}
             >
@@ -929,7 +941,7 @@ export function VaultSidebar({
             </button>
             <button
               type="button"
-              className="inline-flex cursor-pointer items-center justify-center rounded-md p-[0.3rem] text-muted hover:bg-hover hover:text-text [&_svg]:block [&_svg]:size-[0.95em]"
+              className="invisible inline-flex shrink-0 cursor-pointer items-center justify-center rounded p-[0.15rem] text-muted opacity-70 hover:bg-line hover:text-text hover:opacity-100 group-hover:visible [&_svg]:block [&_svg]:size-[0.85em]"
               title="Configure vault"
               onClick={openConfigureForActive}
             >
