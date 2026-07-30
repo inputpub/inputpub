@@ -514,6 +514,7 @@ function defaultConfigTarget(): VaultInstance | null {
 }
 
 export function VaultSidebar({
+  visible,
   currentPath,
   onOpen,
   onCreated,
@@ -522,6 +523,10 @@ export function VaultSidebar({
   onVaultChanged,
   onError,
 }: {
+  /** Whether the sidebar is shown. It stays mounted when hidden (just
+   *  display:none'd) so its loaded file tree survives a close/reopen without
+   *  re-fetching — see App's vaultSidebarMounted. */
+  visible: boolean
   currentPath: string | undefined
   onOpen: (path: string) => void
   onCreated: (path: string) => void
@@ -877,7 +882,7 @@ export function VaultSidebar({
     // window narrows enough to overlap the sheet, it occludes the text behind
     // it instead of bleeding through. At that point (~1340px) it also takes a
     // border + shadow so it reads as a deliberate docked panel, not a stray box.
-    <div className="fixed top-16 bottom-4 z-30 flex w-52 flex-col bg-backdrop left-[max(var(--page-pad),calc(50%-var(--sheet-max)/2-13.5rem))] max-[1340px]:border max-[1340px]:border-line max-[1340px]:bg-surface max-[1340px]:shadow">
+    <div className={`fixed top-16 bottom-4 z-30 w-52 flex-col bg-backdrop left-[max(var(--page-pad),calc(50%-var(--sheet-max)/2-13.5rem))] max-[1340px]:border max-[1340px]:border-line max-[1340px]:bg-surface max-[1340px]:shadow ${visible ? 'flex' : 'hidden'}`}>
       <div className="group flex items-center gap-[0.3rem] px-[0.6rem] py-[0.55rem]">
         <div className="relative min-w-0 flex-1" ref={switcherRef}>
           <button

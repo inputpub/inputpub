@@ -97,6 +97,14 @@ function App() {
   // opening it shows either the "connect a vault" form or the file tree,
   // depending on connection state.
   const [vaultSidebarOpen, setVaultSidebarOpen] = useState(() => getVaultSidebarOpen() ?? false)
+  // Keep the sidebar mounted once it's first shown, so toggling it closed then
+  // open again just hides/reveals it (CSS) rather than unmounting — unmounting
+  // drops the loaded file tree and forces a fresh API fetch on every reopen.
+  // Stays false until the first open, so a user who never opens it pays no fetch.
+  const [vaultSidebarMounted, setVaultSidebarMounted] = useState(vaultSidebarOpen)
+  useEffect(() => {
+    if (vaultSidebarOpen) setVaultSidebarMounted(true)
+  }, [vaultSidebarOpen])
   // The path of the vault file currently loaded into the editor, if any —
   // when set, edits save to the vault instead of the local draft.
   const [vaultPath, setVaultPath] = useState<string | undefined>(undefined)
@@ -397,8 +405,9 @@ function App() {
     // vault sidebar all derive their position from these, so everything lines
     // up with the sheet's edges at any width.
     <div className="relative min-h-dvh [--page-pad:1rem] [--sheet-max:820px] max-[700px]:[--page-pad:0.75rem]">
-      {vaultSidebarOpen && (
+      {vaultSidebarMounted && (
         <VaultSidebar
+          visible={vaultSidebarOpen}
           currentPath={vaultPath}
           onOpen={(path) => void openVaultPath(path)}
           onCreated={onVaultFileCreated}
