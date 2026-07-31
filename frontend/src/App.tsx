@@ -426,7 +426,7 @@ function App() {
         <div className="pointer-events-auto relative">
           <button
             type="button"
-            className={`inline-flex cursor-pointer items-center justify-center rounded-md border border-transparent px-2 py-[0.3rem] text-muted opacity-60 transition duration-150 hover:bg-hover hover:text-text hover:opacity-100 ${vaultSidebarOpen ? 'bg-hover text-text opacity-100' : ''}`}
+            className={`inline-flex cursor-pointer items-center justify-center rounded-md border border-transparent px-2 py-[0.3rem] text-nav-muted opacity-60 transition duration-150 hover:bg-hover hover:text-nav-active hover:opacity-100 ${vaultSidebarOpen ? 'bg-hover text-nav-active opacity-100' : ''}`}
             aria-pressed={vaultSidebarOpen}
             aria-label="Toggle vault"
             title="Vault"
@@ -446,7 +446,7 @@ function App() {
           <div className="relative" ref={toolsRef}>
             <button
               type="button"
-              className="inline-flex cursor-pointer items-center justify-center rounded-md border border-transparent px-2 py-[0.3rem] text-muted opacity-60 transition duration-150 hover:bg-hover hover:text-text hover:opacity-100"
+              className="inline-flex cursor-pointer items-center justify-center rounded-md border border-transparent px-2 py-[0.3rem] text-nav-muted opacity-60 transition duration-150 hover:bg-hover hover:text-nav-active hover:opacity-100"
               aria-haspopup="menu"
               aria-expanded={toolsOpen}
               aria-label="More"
@@ -572,7 +572,7 @@ function App() {
       <main className="flex min-h-dvh justify-center bg-backdrop px-[var(--page-pad)] pt-16">
         <div className="flex h-max min-h-[calc(100dvh-4rem)] w-full max-w-[var(--sheet-max)] flex-col border-[0.5px] shadow-md border-edge bg-paper px-[85px] py-12  max-[700px]:px-5 max-[700px]:pb-8 max-[700px]:pt-7">
           {vaultPath && (
-            <div className="mb-3 flex items-center gap-2 text-[0.78rem] text-muted">
+            <div className="mb-3 flex items-center gap-2 text-[0.78rem] text-nav-muted">
               <span className="truncate">{vaultPath}</span>
               {loadingFile ? (
                 <svg
@@ -594,7 +594,7 @@ function App() {
                 (vaultSaveState === 'dirty' ? (
                   <button
                     type="button"
-                    className="group -my-1 -mr-1 shrink-0 cursor-pointer rounded px-1 py-1 opacity-70 hover:bg-hover hover:text-text hover:opacity-100"
+                    className="group -my-1 -mr-1 shrink-0 cursor-pointer rounded px-1 py-1 opacity-70 hover:text-nav-active hover:opacity-100"
                     onClick={() => void flushPendingVaultSave()}
                   >
                     <span className="group-hover:hidden">Unsaved changes</span>

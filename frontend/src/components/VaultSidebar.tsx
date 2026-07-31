@@ -70,7 +70,7 @@ function buildTree(entries: VaultEntry[]): TreeNode[] {
 }
 
 const rowCls =
-  'group flex w-full cursor-pointer items-center gap-[0.4rem] rounded-md px-[0.4rem] py-[0.3rem] text-left text-[0.84rem] hover:text-text hover:bg-hover'
+  'group flex w-full cursor-pointer items-center gap-[0.4rem] rounded-md px-[0.4rem] py-[0.3rem] text-left text-[0.84rem] hover:text-nav-active'
 const iconCls =
   'inline-flex w-[1.1rem] shrink-0 items-center justify-center text-[0.95rem] [&_svg]:block [&_svg]:size-[1em]'
 
@@ -230,7 +230,7 @@ function Row({
     return (
       <div>
         <div
-          className={`${rowCls} text-muted ${dropActive ? 'bg-accent/15 ring-1 ring-accent/60' : ''}`}
+          className={`${rowCls} text-nav-muted ${dropActive ? 'bg-accent/15 ring-1 ring-accent/60' : ''}`}
           style={indent}
           onClick={() => setOpen((o) => !o)}
           {...dragSource}
@@ -339,7 +339,7 @@ function Row({
 
   return (
     <div
-      className={`${rowCls} ${currentPath === node.path ? 'font-medium text-text' : 'text-muted'}`}
+      className={`${rowCls} ${currentPath === node.path ? 'text-nav-active' : 'text-nav-muted'}`}
       style={indent}
       onClick={() => (renaming ? undefined : onOpen(node.path))}
       {...dragSource}
@@ -887,7 +887,7 @@ export function VaultSidebar({
         <div className="relative min-w-0 flex-1" ref={switcherRef}>
           <button
             type="button"
-            className="flex w-full cursor-pointer items-center gap-1 rounded-md py-[0.1rem] text-left text-[0.92rem] font-medium leading-none text-muted hover:text-text"
+            className="flex w-full cursor-pointer items-center gap-1 rounded-md py-[0.1rem] text-left text-[0.92rem] font-medium leading-none text-nav-muted hover:text-nav-active"
             aria-haspopup="menu"
             aria-expanded={switcherOpen}
             onClick={() => setSwitcherOpen((o) => !o)}

@@ -13,6 +13,11 @@
   --color-selection: var(--selection);
   --color-text: var(--text);
   --color-muted: var(--muted);
+  /* Softer grays for file navigation (sidebar tree + the open-file path in the
+     doc header): warmer, lower-contrast than --muted/--text, so file identity
+     reads as editorial rather than a stark black-on-white app list. */
+  --color-nav-muted: var(--nav-muted);
+  --color-nav-active: var(--nav-active);
   --color-line: var(--line);
   --color-edge: var(--edge);
   --color-accent: var(--accent);
@@ -33,6 +38,8 @@
   --selection: #e5e5e5;
   --text: #000000;
   --muted: #666666;
+  --nav-muted: #6f747b;
+  --nav-active: #1f2328;
   --line: #eaeaea;
   /* Hairline edge for floating surfaces (the sheet). Semi-transparent so it
      darkens/lightens whatever sits behind it — a crisp edge on any backdrop,
@@ -70,6 +77,8 @@
     --selection: #2a2a2a;
     --text: #ededed;
     --muted: #888888;
+    --nav-muted: #969ba3;
+    --nav-active: #ededed;
     --line: #2a2a2a;
     --edge: rgba(255, 255, 255, 0.14);
     --accent: #ffffff;
