@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'self'; form-action 'none'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Privacy Policy · Input Pub</title>
+    <meta
+      name="description"
+      content="How Input Pub handles your data: it doesn't. No accounts, no analytics, no servers storing your documents."
+    />
+    <!-- Static page, copied verbatim from public/ — it isn't processed by Vite,
+         so no build-time CSS features (light-dark(), Tailwind) can be used here. -->
+    <style>
+      :root {
+        --bg: #fafafa;
+        --paper: #ffffff;
+        --text: #1f2328;
+        --muted: #6f747b;
+        --line: #eaeaea;
+        color-scheme: light dark;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #000000;
+          --paper: #0a0a0a;
+          --text: #ededed;
+          --muted: #969ba3;
+          --line: #2a2a2a;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 3rem 1rem 5rem;
+        background: var(--bg);
+        color: var(--text);
+        font:
+          16px/1.7 -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      main {
+        max-width: 40rem;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 1.6rem;
+        margin: 0 0 0.4rem;
+      }
+      h2 {
+        font-size: 1.05rem;
+        margin: 2.4rem 0 0.6rem;
+      }
+      p,
+      li {
+        color: var(--text);
+      }
+      .lede,
+      .meta {
+        color: var(--muted);
+      }
+      .meta {
+        font-size: 0.85rem;
+        margin: 0 0 2rem;
+      }
+      ul {
+        padding-left: 1.1rem;
+      }
+      li {
+        margin: 0.35rem 0;
+      }
+      code {
+        font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+        font-size: 0.86em;
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        padding: 0.1em 0.35em;
+      }
+      a {
+        color: inherit;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+      hr {
+        border: 0;
+        border-top: 1px solid var(--line);
+        margin: 2.5rem 0;
+      }
+      .back {
+        display: inline-block;
+        margin-top: 2rem;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Privacy Policy</h1>
+      <p class="meta">Input Pub · Last updated 1 August 2026</p>
+
+      <p class="lede">
+        Input Pub is a static web page that runs entirely in your browser. There are no accounts, no
+        database, and no server of ours that your documents pass through or rest on. Everything below
+        is a description of how the app actually works.
+      </p>
+
+      <h2>What we collect</h2>
+      <p>
+        Nothing. We do not collect, store, sell, or share any personal information. Specifically,
+        Input Pub has no user accounts, no analytics or telemetry, no advertising, no third-party
+        trackers, and sets no cookies.
+      </p>
+
+      <h2>What is stored on your device</h2>
+      <p>
+        Your data is kept in your own browser's <code>localStorage</code>, on your device only. That
+        includes:
+      </p>
+      <ul>
+        <li>the document you are currently writing (an auto-saved draft);</li>
+        <li>your GitHub access token, and which repository, branch and file you have open;</li>
+        <li>credentials and settings for any image host you configure (e.g. S3, R2);</li>
+        <li>the API key, endpoint and prompts for any AI provider you configure;</li>
+        <li>interface preferences, such as your colour theme.</li>
+      </ul>
+      <p>
+        None of this is transmitted to us. Clearing your browser's site data for
+        <code>inputpub.com</code> erases all of it permanently.
+      </p>
+
+      <h2>Where your data goes when you use a feature</h2>
+      <p>
+        Input Pub talks to other services directly from your browser, only when a feature you invoke
+        requires it, and using credentials you supplied:
+      </p>
+      <ul>
+        <li>
+          <strong>GitHub.</strong> When you connect a repository, your browser reads and writes files
+          via <code>api.github.com</code> using your own token. The GitHub App can only reach the
+          repositories you explicitly grant it.
+        </li>
+        <li>
+          <strong>Signing in with GitHub.</strong> One step of the sign-in exchange must be made with
+          a secret that cannot live in a public web page, so it runs on a small Cloudflare Worker at
+          <code>oauth.inputpub.com</code>. It receives a temporary authorisation code, exchanges it
+          with GitHub for your token, and returns that token to your browser. It is stateless: it
+          stores nothing and keeps no copy of your token.
+        </li>
+        <li>
+          <strong>AI features.</strong> If you configure an AI provider and use it, the text you ask
+          it to act on is sent to the provider's endpoint you specified (for example OpenAI, or any
+          compatible endpoint you choose). That provider's own privacy policy then applies.
+        </li>
+        <li>
+          <strong>Image uploads.</strong> Images you insert are uploaded to the image host you
+          configured, using your credentials.
+        </li>
+        <li>
+          <strong>Publishing.</strong> Publishing targets are not integrations: Input Pub copies your
+          text to the clipboard and opens the destination in a new tab, or opens your own mail app.
+          Your content reaches those services only through that action, under their own policies.
+        </li>
+      </ul>
+
+      <h2>Hosting</h2>
+      <p>
+        The site is served by GitHub Pages, and the sign-in step above by Cloudflare. Like any web
+        host, those providers may log basic request data such as IP address and browser user agent in
+        order to serve the site. That data is handled under their policies, and we neither receive
+        nor have access to it.
+      </p>
+
+      <h2>Revoking access and deleting your data</h2>
+      <ul>
+        <li>
+          Revoke the GitHub App's access at any time at
+          <a href="https://github.com/settings/installations" rel="noreferrer"
+            >github.com/settings/installations</a
+          >.
+        </li>
+        <li>Delete everything held locally by clearing site data for <code>inputpub.com</code>.</li>
+      </ul>
+      <p>Because we hold nothing, there is nothing for us to delete on your behalf.</p>
+
+      <h2>Children</h2>
+      <p>
+        Input Pub is not directed at children under 13, and we knowingly collect no information from
+        anyone.
+      </p>
+
+      <h2>Changes</h2>
+      <p>
+        If this policy changes, the date above will change with it, and the revision history is
+        public in the project's repository.
+      </p>
+
+      <h2>Contact</h2>
+      <p>
+        Questions can be raised at
+        <a href="https://github.com/inputpub/inputpub/issues" rel="noreferrer"
+          >github.com/inputpub/inputpub/issues</a
+        >.
+      </p>
+
+      <hr />
+      <a class="back" href="/">← Back to Input Pub</a>
+    </main>
+  </body>
+</html>
