@@ -97,6 +97,8 @@
   --selection: #2a2a2a;
   --text: #ededed;
   --muted: #888888;
+  --nav-muted: #969ba3;
+  --nav-active: #ededed;
   --line: #2a2a2a;
   --edge: rgba(255, 255, 255, 0.14);
   --accent: #ffffff;
