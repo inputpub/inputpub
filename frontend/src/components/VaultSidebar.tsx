@@ -384,31 +384,6 @@ function Row({
   )
 }
 
-/** First-time / no-vault-yet screen: a plain-language choice between vault
- *  types, so someone who isn't a programmer isn't dropped straight into a
- *  GitHub-token form before they even know a local folder is an option. */
-function TypePicker({ onSelect }: { onSelect: (providerId: string) => void }) {
-  return (
-    <div className="flex flex-col gap-[0.6rem] p-[0.7rem]">
-      <p className="m-0 text-[0.78rem] text-muted">Choose where to keep your files.</p>
-      {vaultProviders.map((p) => (
-        <button
-          key={p.id}
-          type="button"
-          className="flex cursor-pointer items-start gap-[0.6rem] rounded-lg border border-line px-[0.7rem] py-[0.6rem] text-left hover:bg-hover"
-          onClick={() => onSelect(p.id)}
-        >
-          <span className={`${iconCls} mt-[0.1rem]`}>{p.icon}</span>
-          <span className="flex flex-col gap-[0.15rem]">
-            <span className="text-[0.86rem] font-medium">{p.name}</span>
-            <span className="text-[0.74rem] leading-snug text-muted">{p.blurb}</span>
-          </span>
-        </button>
-      ))}
-    </div>
-  )
-}
-
 /** The inline "connect a vault" form for one specific instance (new or
  *  existing). Fields are saved straight to its own `vault.<id>` namespace, so
  *  the same provider can be connected more than once with independent config. */
@@ -506,11 +481,10 @@ function pendingInstance(provider: VaultProvider): VaultInstance {
   return { id: generateVaultInstanceId(provider.id), provider }
 }
 
-/** Falls back to a pending instance of the sole provider when there's only
- *  one type to choose from — otherwise null shows the type picker. */
-function defaultConfigTarget(): VaultInstance | null {
-  if (vaultProviders.length > 1) return null
-  return vaultProviders[0] ? pendingInstance(vaultProviders[0]) : null
+/** What the configure form targets when there's nothing else to go on: a fresh
+ *  instance of the sole provider, so connecting is one step with nothing to pick. */
+function defaultConfigTarget(): VaultInstance {
+  return pendingInstance(vaultProviders[0])
 }
 
 export function VaultSidebar({
@@ -546,10 +520,9 @@ export function VaultSidebar({
   // Mirror of the active instance id, so the tree-reload effect below re-runs
   // when the active vault changes — not only on a view transition.
   const [activeId, setActiveId] = useState<string | undefined>(() => activeVaultInstance()?.id)
-  // Which instance the configure form targets — a saved one (reconfiguring,
-  // or switching to an unconfigured provider) or a fresh pending one (adding
-  // a new vault). null = show the "choose a vault type" picker.
-  const [configTarget, setConfigTarget] = useState<VaultInstance | null>(
+  // Which instance the configure form targets — a saved one (reconfiguring an
+  // existing vault) or a fresh pending one (adding another).
+  const [configTarget, setConfigTarget] = useState<VaultInstance>(
     () => activeVaultInstance() ?? defaultConfigTarget(),
   )
   const [switcherOpen, setSwitcherOpen] = useState(false)
@@ -771,13 +744,22 @@ export function VaultSidebar({
   async function disconnect() {
     await disconnectVault()
     setEntries(null)
-    setActiveId(undefined)
-    setView('configure')
-    // Nothing's connected anymore — back to the type picker (if there's an
-    // actual choice to make) rather than lingering on the just-disconnected
-    // instance's form.
-    setConfigTarget(defaultConfigTarget())
+    setLoadError(null)
     onVaultChanged()
+    // Disconnecting one vault shouldn't strand the user in the connect form
+    // when they still have others — the form has no switcher to escape through.
+    // Fall back to a remaining vault and keep browsing; only drop to the
+    // connect form when that was genuinely the last one.
+    const next = listVaultInstances()[0]
+    if (next) {
+      await connectVault(next.id)
+      setActiveId(next.id)
+      setView('browse')
+      return
+    }
+    setActiveId(undefined)
+    setConfigTarget(defaultConfigTarget())
+    setView('configure')
   }
 
   // Picking an already-connected instance from the switcher: jump straight
@@ -813,7 +795,7 @@ export function VaultSidebar({
   function handleConnected() {
     setEntries(null)
     setLoadError(null)
-    setActiveId(configTarget?.id)
+    setActiveId(configTarget.id)
     setView('browse')
     onVaultChanged()
   }
@@ -821,7 +803,6 @@ export function VaultSidebar({
   // For providers with a custom ConnectForm: it writes the config itself, then
   // calls this to register + activate the instance and switch to browsing.
   async function completeConnect() {
-    if (!configTarget) return
     registerVaultInstance(configTarget.provider.id, configTarget.id)
     await connectVault(configTarget.id)
     handleConnected()
@@ -830,14 +811,11 @@ export function VaultSidebar({
   const connected = isVaultConnected()
   const active = activeVaultInstance()
   const instances = listVaultInstances()
-  const isConfiguringActive = !!configTarget && configTarget.id === active?.id
-  // Cancel/back out of the configure form: to the active vault's file list if
-  // there is one, else back to the type picker (when there's an actual choice).
-  const configureCancel = connected
-    ? () => setView('browse')
-    : vaultProviders.length > 1
-      ? () => setConfigTarget(null)
-      : undefined
+  const isConfiguringActive = configTarget.id === active?.id
+  // Cancel/back out of the configure form — only meaningful once a vault is
+  // connected (there's a file list to return to); on the very first connect
+  // there's nothing behind it, so the form hides its cancel button.
+  const configureCancel = connected ? () => setView('browse') : undefined
 
   const create: CreateState = {
     parent: createParent,
@@ -883,84 +861,81 @@ export function VaultSidebar({
     // it instead of bleeding through. At that point (~1340px) it also takes a
     // border + shadow so it reads as a deliberate docked panel, not a stray box.
     <div className={`fixed top-16 bottom-4 z-30 w-52 flex-col bg-backdrop left-[max(var(--page-pad),calc(50%-var(--sheet-max)/2-13.5rem))] max-[1340px]:border max-[1340px]:border-line max-[1340px]:bg-surface max-[1340px]:shadow ${visible ? 'flex' : 'hidden'}`}>
-      <div className="group flex items-center gap-[0.3rem] px-[0.6rem] py-[0.55rem]">
-        <div className="relative min-w-0 flex-1" ref={switcherRef}>
+      {/* Only while browsing: mid-connect (logging in, or adding a repo) there's
+          no vault to switch away from, and the connect form supplies its own
+          "GitHub" heading — so the switcher would be inert and redundant. */}
+      {view === 'browse' && (
+        <div className="group flex items-center gap-[0.3rem] px-[0.6rem] py-[0.55rem]">
+          <div className="relative min-w-0 flex-1" ref={switcherRef}>
+            <button
+              type="button"
+              className="flex w-full cursor-pointer items-center gap-1 rounded-md py-[0.1rem] text-left text-[0.92rem] font-medium leading-none text-nav-muted hover:text-nav-active"
+              aria-haspopup="menu"
+              aria-expanded={switcherOpen}
+              onClick={() => setSwitcherOpen((o) => !o)}
+            >
+              {/* Nudged up 1px: the glyph's optical center sits a hair below the
+                  icons' geometric center, so left as-is the text reads low. */}
+              <span className="-translate-y-px truncate">
+                {active ? instanceLabel(active) : 'Connect a vault'}
+              </span>
+              {/* Up/down chevrons — the "switcher / selector" affordance, kept
+                  visually distinct from the folder rows' single expand chevron. */}
+              <svg
+                className="size-[0.85em] shrink-0"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="m7 15 5 5 5-5" />
+                <path d="m7 9 5-5 5 5" />
+              </svg>
+            </button>
+            {switcherOpen && (
+              <Menu align="left">
+                {instances.map((instance) => (
+                  <MenuItem
+                    key={instance.id}
+                    icon={instance.provider.icon}
+                    trailing={instance.id === active?.id ? CheckIcon : undefined}
+                    onClick={() => void selectInstance(instance)}
+                  >
+                    {instanceLabel(instance)}
+                  </MenuItem>
+                ))}
+                {instances.length > 0 && <MenuDivider />}
+                {vaultProviders.map((p) => (
+                  <MenuItem key={p.id} icon={PlusIcon} onClick={() => startNewInstance(p.id)}>
+                    {p.addLabel ?? `Add ${p.name}`}
+                  </MenuItem>
+                ))}
+              </Menu>
+            )}
+          </div>
           <button
             type="button"
-            className="flex w-full cursor-pointer items-center gap-1 rounded-md py-[0.1rem] text-left text-[0.92rem] font-medium leading-none text-nav-muted hover:text-nav-active"
-            aria-haspopup="menu"
-            aria-expanded={switcherOpen}
-            onClick={() => setSwitcherOpen((o) => !o)}
+            className="invisible inline-flex shrink-0 cursor-pointer items-center justify-center rounded p-[0.15rem] text-muted opacity-70 hover:bg-line hover:text-text hover:opacity-100 group-hover:visible [&_svg]:block [&_svg]:size-[0.85em]"
+            title="New file"
+            onClick={() => startCreate('')}
           >
-            {/* Nudged up 1px: the glyph's optical center sits a hair below the
-                icons' geometric center, so left as-is the text reads low. */}
-            <span className="-translate-y-px truncate">
-              {active ? instanceLabel(active) : 'Connect a vault'}
-            </span>
-            {/* Up/down chevrons — the "switcher / selector" affordance, kept
-                visually distinct from the folder rows' single expand chevron. */}
-            <svg
-              className="size-[0.85em] shrink-0"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="m7 15 5 5 5-5" />
-              <path d="m7 9 5-5 5 5" />
-            </svg>
+            {PlusIcon}
           </button>
-          {switcherOpen && (
-            <Menu align="left">
-              {instances.map((instance) => (
-                <MenuItem
-                  key={instance.id}
-                  icon={instance.provider.icon}
-                  trailing={instance.id === active?.id ? CheckIcon : undefined}
-                  onClick={() => void selectInstance(instance)}
-                >
-                  {instanceLabel(instance)}
-                </MenuItem>
-              ))}
-              {instances.length > 0 && <MenuDivider />}
-              {vaultProviders.map((p) => (
-                <MenuItem key={p.id} icon={PlusIcon} onClick={() => startNewInstance(p.id)}>
-                  Add {p.name}
-                </MenuItem>
-              ))}
-            </Menu>
-          )}
+          <button
+            type="button"
+            className="invisible inline-flex shrink-0 cursor-pointer items-center justify-center rounded p-[0.15rem] text-muted opacity-70 hover:bg-line hover:text-text hover:opacity-100 group-hover:visible [&_svg]:block [&_svg]:size-[0.85em]"
+            title="Configure vault"
+            onClick={openConfigureForActive}
+          >
+            {GearIcon}
+          </button>
         </div>
-        {view === 'browse' && (
-          <>
-            <button
-              type="button"
-              className="invisible inline-flex shrink-0 cursor-pointer items-center justify-center rounded p-[0.15rem] text-muted opacity-70 hover:bg-line hover:text-text hover:opacity-100 group-hover:visible [&_svg]:block [&_svg]:size-[0.85em]"
-              title="New file"
-              onClick={() => startCreate('')}
-            >
-              {PlusIcon}
-            </button>
-            <button
-              type="button"
-              className="invisible inline-flex shrink-0 cursor-pointer items-center justify-center rounded p-[0.15rem] text-muted opacity-70 hover:bg-line hover:text-text hover:opacity-100 group-hover:visible [&_svg]:block [&_svg]:size-[0.85em]"
-              title="Configure vault"
-              onClick={openConfigureForActive}
-            >
-              {GearIcon}
-            </button>
-          </>
-        )}
-      </div>
+      )}
 
-      {view === 'configure' && !configTarget ? (
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <TypePicker onSelect={(providerId) => startNewInstance(providerId)} />
-        </div>
-      ) : view === 'configure' && configTarget ? (
+      {view === 'configure' ? (
         <div className="min-h-0 flex-1 overflow-y-auto">
           {configTarget.provider.ConnectForm ? (
             <configTarget.provider.ConnectForm

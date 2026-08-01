@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
 import type { ConfigField } from '../destinations/types'
 
-// A vault is a connected external store (a GitHub repo today; a local folder
-// or Google Drive could follow) browsed as a file tree and edited in place.
+// A vault is a connected external store (a GitHub repo today; something like
+// Google Drive could follow) browsed as a file tree and edited in place.
 // Mirrors the imagehosts registry, but for multi-file read/write instead of
 // one-shot binary uploads.
 //
@@ -71,9 +71,10 @@ export interface VaultProvider {
   id: string
   name: string
   icon: ReactNode
-  /** Plain-language one-liner shown in the "choose a vault type" picker —
-   *  written for someone who doesn't know what a token or a picker API is. */
-  blurb: string
+  /** Menu label for connecting another instance of this provider — worded in
+   *  terms of what an instance actually is (e.g. "Add a repository" rather
+   *  than "Add GitHub"). Defaults to `Add <name>`. */
+  addLabel?: string
   /** Explanatory text shown above the fields in this provider's connect form.
    *  Provider-specific on purpose — where the data lives and what "connecting"
    *  means differs (a token in localStorage vs. editing files on disk), so a

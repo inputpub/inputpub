@@ -161,10 +161,10 @@ export const githubVault: VaultProvider = {
   id: 'github',
   name: 'GitHub',
   icon: GitHubIcon,
-  blurb: 'Store your files in a GitHub repository — works on any device, needs a free GitHub account.',
+  addLabel: 'Add a repository',
   connectNote:
     'Your token is saved only in this browser (localStorage) and sent straight to GitHub — never to our servers.',
-  batchWrites: { defaultDelaySeconds: 60, delayConfigKey: 'autosaveSeconds' },
+  batchWrites: { defaultDelaySeconds: 15, delayConfigKey: 'autosaveSeconds' },
   config: [
     {
       key: 'token',
@@ -181,7 +181,7 @@ export const githubVault: VaultProvider = {
     {
       key: 'autosaveSeconds',
       label: 'Auto-save after inactivity (seconds)',
-      placeholder: '60',
+      placeholder: '15',
       optional: true,
       hint: 'Saves are commits, so edits are batched into one commit per pause instead of one per keystroke.',
     },

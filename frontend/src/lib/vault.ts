@@ -19,8 +19,8 @@ import {
   type VaultContext,
 } from '../vault'
 
-// Drives the connected vault(s) (multi-file stores, e.g. GitHub repos or
-// local folders). A provider is a *type* of store; the user can connect
+// Drives the connected vault(s) — multi-file stores, currently GitHub repos.
+// A provider is a *type* of store; the user can connect
 // several independent *instances* of the same type, each with its own
 // generated id and its own `vault.<instanceId>` config namespace — see
 // vault/types.ts for the provider/instance distinction. Mirrors
@@ -84,9 +84,9 @@ export function isVaultConnected(): boolean {
   return !!activeVaultInstance()
 }
 
-/** Whether the active vault should batch edits into occasional saves (e.g.
- *  GitHub, where every save is a commit) rather than save on every edit —
- *  a local folder write is just an instant disk write with no such cost. */
+/** Whether the active vault should batch edits into occasional saves (as
+ *  GitHub does, where every save is a commit) rather than save on every edit.
+ *  Kept as a provider capability so a cheap-write store can opt out. */
 export function activeVaultBatchesWrites(): boolean {
   return !!activeVaultInstance()?.provider.batchWrites
 }

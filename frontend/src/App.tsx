@@ -102,9 +102,12 @@ function App() {
   // drops the loaded file tree and forces a fresh API fetch on every reopen.
   // Stays false until the first open, so a user who never opens it pays no fetch.
   const [vaultSidebarMounted, setVaultSidebarMounted] = useState(vaultSidebarOpen)
-  useEffect(() => {
-    if (vaultSidebarOpen) setVaultSidebarMounted(true)
-  }, [vaultSidebarOpen])
+  // Latch the two together here rather than in an effect watching `open` —
+  // that would set state during render-commit and cascade an extra render.
+  const showVaultSidebar = useCallback((open: boolean) => {
+    setVaultSidebarOpen(open)
+    if (open) setVaultSidebarMounted(true)
+  }, [])
   // The path of the vault file currently loaded into the editor, if any —
   // when set, edits save to the vault instead of the local draft.
   const [vaultPath, setVaultPath] = useState<string | undefined>(undefined)
@@ -160,8 +163,9 @@ function App() {
     reopenLastVaultFile().then((opened) => {
       if (!opened) return
       showDocument(opened.content, opened.path)
-      if (getVaultSidebarOpen() === undefined) setVaultSidebarOpen(true)
+      if (getVaultSidebarOpen() === undefined) showVaultSidebar(true)
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Reflect lib/vault's save state (updated outside React, by the staging/
@@ -211,9 +215,8 @@ function App() {
   // Closing/reloading the tab is different from the checkpoints above: the
   // page won't stay open long enough to reliably wait for a flush to finish.
   // For a batched (e.g. GitHub) vault with a save still pending, warn via the
-  // browser's native "leave site?" prompt instead — for a local folder, a
-  // write is already near-instant, so there's essentially never anything to
-  // lose and the warning would just be noise.
+  // browser's native "leave site?" prompt instead — a store that writes on
+  // every edit has nothing pending to lose, so it skips the warning.
   useEffect(() => {
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       void flushPendingVaultSave()
@@ -226,8 +229,8 @@ function App() {
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
   }, [])
 
-  // Stage every edit; lib/vault.ts decides when to actually save (batched
-  // for providers like GitHub, near-instant for a local folder).
+  // Stage every edit; lib/vault.ts decides when to actually save (batched for
+  // providers like GitHub, where each save is a commit).
   const onEditorChange = useCallback(
     (markdown: string) => {
       if (vaultPath) {
@@ -432,7 +435,7 @@ function App() {
             title="Vault"
             onClick={() => {
               const next = !vaultSidebarOpen
-              setVaultSidebarOpen(next)
+              showVaultSidebar(next)
               persistVaultSidebarOpen(next)
             }}
           >
@@ -587,9 +590,9 @@ function App() {
                   <path d="M21 12a9 9 0 1 1-6.219-8.56" />
                 </svg>
               ) : (
-                /* A local-folder save is an instant disk write with nothing
-                   meaningful to report — only batched (e.g. GitHub) vaults,
-                   where a save can sit staged for a while, need this. */
+                /* Only batched (e.g. GitHub) vaults, where a save can sit
+                   staged for a while, have anything worth reporting here — a
+                   save-on-every-edit store is always already up to date. */
                 activeVaultBatchesWrites() &&
                 (vaultSaveState === 'dirty' ? (
                   <button

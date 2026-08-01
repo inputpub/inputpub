@@ -3,7 +3,7 @@
 Input [here](https://inputpub.com), publish anywhere — a minimalist Markdown editor that publishes to X, Email, ChatGPT and more.
 
 - ✍️ Write once in a clean [Milkdown](https://milkdown.dev) WYSIWYG editor (auto-saved locally)
-- 🚀 Send to **X**, **Email**, **ChatGPT** and more; keep files in a **GitHub** repo or local folder (vault)
+- 🚀 Send to **X**, **Email**, **ChatGPT** and more; keep files in a **GitHub** repo (vault)
 - 🧩 Plugin model — add a destination = one file + one line in [`frontend/src/destinations`](frontend/src/destinations)
 - 🪶 Pure frontend, no backend, no login. API targets use your own token stored in the browser.
 
