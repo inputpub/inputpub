@@ -1,11 +1,20 @@
 // "Login with GitHub" for the GitHub vault, via a GitHub *App* (not an OAuth
-// App) so the user grants access to only the repositories they pick. The flow:
-// open the app's install page (where GitHub shows the repo picker) → GitHub
-// redirects back with a `code` and `installation_id` → a stateless Worker swaps
-// the code for a user-to-server token (the one step needing the client secret).
-// The token is stored in the browser like any other credential — nothing is
-// kept server-side. With token expiration disabled on the App, it doesn't
-// expire, so there's no refresh flow.
+// App) so the user grants access to only the repositories they pick.
+//
+// Authorizing the App and installing it on repositories are two separate things
+// on GitHub, and the flow has to cope with either one being done already:
+//   - The install page shows the repo picker, but for an account that already
+//     has the App it renders a "configure" page and never redirects back with a
+//     code, so the popup dead-ends.
+//   - The OAuth authorize endpoint always returns a code, but hands back a
+//     working token with no installation at all for anyone who has authorized
+//     before — leaving them connected with nothing to connect *to*.
+// So: authorize first (always yields a code), then, only if the token turns out
+// to see no installation, carry the user on to the install page in the same
+// popup. A stateless Worker swaps the code for a user-to-server token (the one
+// step needing the client secret). The token is stored in the browser like any
+// other credential — nothing is kept server-side. With token expiration
+// disabled on the App, it doesn't expire, so there's no refresh flow.
 //
 // Configured via build-time env (see frontend/.env.example). When unset, the UI
 // falls back to the manual personal-access-token flow.
@@ -25,48 +34,112 @@ interface CallbackMessage {
   error?: string | null
 }
 
-/** Runs the popup authorize flow; resolves with a user access token. Uses the
- *  Worker's /authorize redirect (GitHub's OAuth authorize endpoint), which
- *  always returns a `code` — including when the App is already installed on the
- *  account (e.g. logging in on a second device). Repo selection is a separate
- *  step (manageRepoAccess); what the token can access is fetched live later. */
+const installUrl = (slug: string, state?: string) =>
+  `https://github.com/apps/${encodeURIComponent(slug)}/installations/new` +
+  (state ? `?state=${encodeURIComponent(state)}` : '')
+
+function openPopup(url: string): Window {
+  const popup = window.open(url, 'github-oauth', 'width=640,height=760')
+  if (!popup) throw new Error('Popup blocked — allow popups for this site and try again.')
+  return popup
+}
+
+function closeQuietly(popup: Window): void {
+  try {
+    popup.close()
+  } catch {
+    /* already closed */
+  }
+}
+
+/** Whether this token can see any installation — i.e. whether the user has
+ *  actually granted access to a repository, as opposed to merely authorizing
+ *  the App. On any error this answers "yes": failing to tell is no reason to
+ *  push someone through an extra permissions step they may not need. */
+async function hasInstallations(token: string): Promise<boolean> {
+  try {
+    const res = await fetch('https://api.github.com/user/installations?per_page=1', {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
+      cache: 'no-store',
+    })
+    if (!res.ok) return true
+    const { total_count = 0 } = (await res.json()) as { total_count?: number }
+    return total_count > 0
+  } catch {
+    return true
+  }
+}
+
+/** Runs the popup authorize flow; resolves with a user access token. If the
+ *  account comes back with no installation, the same popup continues to the
+ *  App's install page so repo selection happens without a second trip. */
 export async function loginWithGitHub(): Promise<string> {
   if (!WORKER_URL) throw new Error('GitHub login isn’t configured')
   const state = crypto.randomUUID()
   const redirectUri = `${location.origin}/callback.html`
-  const url =
+  const popup = openPopup(
     `${WORKER_URL}/authorize?state=${encodeURIComponent(state)}` +
-    `&redirect_uri=${encodeURIComponent(redirectUri)}`
-
-  const popup = window.open(url, 'github-oauth', 'width=640,height=760')
-  if (!popup) throw new Error('Popup blocked — allow popups for this site and try again.')
-
-  const code = await waitForCallback(popup, state)
-  return exchangeCode(code, redirectUri, WORKER_URL)
+      `&redirect_uri=${encodeURIComponent(redirectUri)}`,
+  )
+  try {
+    const code = await waitForCallback(popup, state)
+    const token = await exchangeCode(code, redirectUri, WORKER_URL)
+    if (APP_SLUG && !(await hasInstallations(token))) {
+      // Reusing this window rather than opening another: by now the click that
+      // started all this is long over, and a fresh popup would be blocked.
+      popup.location.href = installUrl(APP_SLUG, state)
+      await waitForPopupDone(popup)
+    }
+    return token
+  } finally {
+    closeQuietly(popup)
+  }
 }
 
 /** Open the GitHub App's install/configure page so the user can add or remove
- *  the repositories it can access. Resolves when the popup closes — no token or
+ *  the repositories it can access. Resolves once they're done — no token or
  *  code is involved (the current token already works); the caller just re-lists
  *  repos afterwards. */
-export function manageRepoAccess(): Promise<void> {
+export async function manageRepoAccess(): Promise<void> {
   if (!APP_SLUG) throw new Error('GitHub login isn’t configured')
-  const url = `https://github.com/apps/${encodeURIComponent(APP_SLUG)}/installations/new`
-  const popup = window.open(url, 'github-oauth', 'width=640,height=760')
-  if (!popup) {
-    return Promise.reject(new Error('Popup blocked — allow popups for this site and try again.'))
+  const popup = openPopup(installUrl(APP_SLUG))
+  try {
+    await waitForPopupDone(popup)
+  } finally {
+    closeQuietly(popup)
   }
+}
+
+/** Waits for the install popup to finish: either GitHub redirects it back to
+ *  our callback page, or the user closes it. Leaves closing to the caller. */
+function waitForPopupDone(popup: Window): Promise<void> {
   return new Promise((resolve) => {
     const poll = setInterval(() => {
       if (popup.closed) {
-        clearInterval(poll)
+        cleanup()
         resolve()
       }
     }, 500)
+
+    function onMessage(e: MessageEvent) {
+      if (e.origin !== location.origin) return
+      if ((e.data as CallbackMessage)?.source !== 'inputpub-oauth') return
+      cleanup()
+      resolve()
+    }
+
+    function cleanup() {
+      clearInterval(poll)
+      window.removeEventListener('message', onMessage)
+    }
+
+    window.addEventListener('message', onMessage)
   })
 }
 
-/** Waits for the callback page to postMessage the auth code back to us. */
+/** Waits for the callback page to postMessage the auth code back to us. Leaves
+ *  the popup open — login may still send it on to the repo picker; the caller
+ *  closes it either way. */
 function waitForCallback(popup: Window, expectedState: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const poll = setInterval(() => {
@@ -94,11 +167,6 @@ function waitForCallback(popup: Window, expectedState: string): Promise<string> 
     function cleanup() {
       clearInterval(poll)
       window.removeEventListener('message', onMessage)
-      try {
-        popup.close()
-      } catch {
-        /* already closed */
-      }
     }
 
     window.addEventListener('message', onMessage)

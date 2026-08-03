@@ -22,7 +22,12 @@
     <p>Connecting to GitHub…</p>
     <script>
       // The OAuth popup lands here with ?code=…&state=…; hand both back to the
-      // app window and close. The app (same origin) does the token exchange.
+      // app window. The app (same origin) does the token exchange.
+      //
+      // Closing is left to the opener, which may not be finished with this
+      // window: after authorizing, a user with no repositories granted yet is
+      // sent on to the App's install page in this same popup. Opening a fresh
+      // one that late would be blocked as an unsolicited popup.
       var p = new URLSearchParams(location.search)
       var msg = {
         source: 'inputpub-oauth',
@@ -33,7 +38,6 @@
       }
       if (window.opener) {
         window.opener.postMessage(msg, location.origin)
-        window.close()
       } else {
         document.body.textContent = 'You can close this window and return to Input Pub.'
       }
