@@ -4,7 +4,6 @@ import { destinations, type Destination } from './destinations'
 import {
   GearIcon,
   MoreIcon,
-  ImageIcon,
   FeedbackIcon,
   MonitorIcon,
   SunIcon,
@@ -43,6 +42,7 @@ import {
   resetVaultSaveState,
   stageVaultEdit,
 } from './lib/vault'
+import { inlineVaultImages, releaseVaultImages } from './lib/vaultImages'
 import { Menu, MenuDivider, MenuItem } from './components/Menu'
 import { Toast, type ToastStatus } from './components/Toast'
 import { ConfigDialog } from './components/dialogs/ConfigDialog'
@@ -50,8 +50,6 @@ import { AiProviderDialog } from './components/dialogs/AiProviderDialog'
 import { AiPromptsDialog } from './components/dialogs/AiPromptsDialog'
 import { PromptDialog } from './components/dialogs/PromptDialog'
 import { SettingsDialog } from './components/dialogs/SettingsDialog'
-import { ImageHostDialog } from './components/dialogs/ImageHostDialog'
-import { ImageUploadDialog } from './components/dialogs/ImageUploadDialog'
 import { VaultSidebar } from './components/VaultSidebar'
 import type { VaultSaveState } from './lib/vault'
 
@@ -82,12 +80,9 @@ function App() {
   const [busy, setBusy] = useState<string | null>(null)
   const [toolsOpen, setToolsOpen] = useState(false)
   // The tools menu drills into sub-views: "Publish" (the destination list) and
-  // "Settings" (config entries — image host / AI — that are noise for users
-  // who don't use those features).
+  // "Settings" (AI config, which is noise for users who don't use it).
   const [toolsView, setToolsView] = useState<'main' | 'publish' | 'settings'>('main')
   const [theme, setTheme] = useState<ThemePref>(getThemePref)
-  const [imageHostOpen, setImageHostOpen] = useState(false)
-  const [imageChoiceOpen, setImageChoiceOpen] = useState(false)
   const [aiProviderOpen, setAiProviderOpen] = useState(false)
   const [aiPromptsOpen, setAiPromptsOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -290,6 +285,9 @@ function App() {
   // disconnected) from the sidebar — if a vault file was open, it may no
   // longer belong to the active vault, so fall back to the local draft.
   function onVaultChanged() {
+    // Cached image blobs belong to the vault that's going away — drop them so a
+    // path that exists in both repos can't show the old one's bytes.
+    releaseVaultImages()
     if (vaultPath) showDocument(loadDraft(), undefined)
   }
 
@@ -339,9 +337,15 @@ function App() {
         try {
           if (dest.clipboard.format === 'mp-html') {
             // Rich-text paste: HTML as text/html, raw Markdown as the fallback.
+            // Vault images are inlined as data: URIs so they survive the paste
+            // (see inlineVaultImages). That read can outlast the click's user
+            // activation, so it goes *inside* ClipboardItem as a promise —
+            // awaiting it before write() would risk losing permission to copy.
             await navigator.clipboard.write([
               new ClipboardItem({
-                'text/html': new Blob([text], { type: 'text/html' }),
+                'text/html': inlineVaultImages(text).then(
+                  (html) => new Blob([html], { type: 'text/html' }),
+                ),
                 'text/plain': new Blob([markdown], { type: 'text/plain' }),
               }),
             ])
@@ -536,15 +540,6 @@ function App() {
                     </MenuItem>
                     <MenuDivider />
                     <MenuItem
-                      icon={ImageIcon}
-                      onClick={() => {
-                        closeTools()
-                        setImageHostOpen(true)
-                      }}
-                    >
-                      Image Host
-                    </MenuItem>
-                    <MenuItem
                       icon={SparklesIcon}
                       onClick={() => {
                         closeTools()
@@ -622,7 +617,12 @@ function App() {
               defaultValue={seed}
               autoFocus={focusMount}
               onChange={onEditorChange}
-              onImageUploadUnconfigured={() => setImageChoiceOpen(true)}
+              onImageUploadUnavailable={() =>
+                setStatus({
+                  kind: 'error',
+                  text: 'Open a file in your repo first — images are saved into it.',
+                })
+              }
               onImageUploadError={(text) => setStatus({ kind: 'error', text })}
               onAiUnconfigured={() => setAiProviderOpen(true)}
               onAiError={(text) => setStatus({ kind: 'error', text })}
@@ -663,21 +663,6 @@ function App() {
           onClose={() => setSettingsOpen(false)}
         />
       )}
-
-      {imageChoiceOpen && (
-        <ImageUploadDialog
-          onClose={() => setImageChoiceOpen(false)}
-          onConfigure={() => {
-            setImageChoiceOpen(false)
-            setImageHostOpen(true)
-          }}
-          onUpgrade={() => {
-            window.location.href = '/pro'
-          }}
-        />
-      )}
-
-      {imageHostOpen && <ImageHostDialog onClose={() => setImageHostOpen(false)} />}
 
       {aiProviderOpen && <AiProviderDialog onClose={() => setAiProviderOpen(false)} />}
 

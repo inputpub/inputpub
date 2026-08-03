@@ -11,6 +11,17 @@ function toBase64(text: string): string {
   return btoa(binary)
 }
 
+/** Base64 for raw bytes. Chunked because btoa needs a binary string, and
+ *  spreading a whole image's worth of bytes at once overflows the call stack. */
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = ''
+  const chunk = 0x8000
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
+  }
+  return btoa(binary)
+}
+
 function fromBase64(b64: string): string {
   const binary = atob(b64.replace(/\n/g, ''))
   const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0))
@@ -251,6 +262,37 @@ export const githubVault: VaultProvider = {
     const data = (await res.json()) as { content?: { sha?: string } }
     if (!data.content?.sha) throw new Error('Unexpected response saving file')
     return { sha: data.content.sha }
+  },
+
+  async writeBinary(ctx, path, bytes) {
+    const { repo, token } = repoAndToken(ctx)
+    const branch = await resolveBranch(ctx, repo, token)
+    const res = await fetch(contentsUrl(repo, path), {
+      method: 'PUT',
+      headers: headers(token),
+      body: JSON.stringify({
+        message: `Add ${path}`,
+        content: bytesToBase64(new Uint8Array(bytes)),
+        branch,
+      }),
+    })
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '')
+      throw new Error(`Upload failed (${res.status})${detail ? `: ${detail.slice(0, 140)}` : ''}`)
+    }
+  },
+
+  async readBinary(ctx, path) {
+    const { repo, token } = repoAndToken(ctx)
+    const branch = await resolveBranch(ctx, repo, token)
+    // `.raw` returns the bytes directly. The default JSON representation
+    // base64-encodes them and refuses outright over 1MB, which plenty of
+    // pasted screenshots exceed.
+    const res = await fetch(contentsUrl(repo, path, branch), {
+      headers: { ...headers(token), Accept: 'application/vnd.github.raw' },
+    })
+    if (!res.ok) throw new Error(`Couldn't load the image (${res.status})`)
+    return res.blob()
   },
 
   async deleteFile(ctx, path) {

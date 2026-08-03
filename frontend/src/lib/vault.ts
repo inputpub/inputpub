@@ -24,7 +24,7 @@ import {
 // several independent *instances* of the same type, each with its own
 // generated id and its own `vault.<instanceId>` config namespace — see
 // vault/types.ts for the provider/instance distinction. Mirrors
-// lib/imageHost.ts's dispatch layer, plus the state needed to track which
+// a provider-dispatch layer, plus the state needed to track which
 // file is open so saves know its current revision (`sha`).
 
 export interface VaultInstance {
@@ -275,7 +275,9 @@ export function stageVaultEdit(content: string): void {
 // switching files) flush inside their own locked turn.
 let writeChain: Promise<unknown> = Promise.resolve()
 function noop() {}
-function withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
+/** Exported for lib/vaultImages, whose uploads are commits too and so have to
+ *  queue behind the same chain as everything else here. */
+export function withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
   const result = writeChain.then(fn, fn)
   // Keep the chain alive whether this turn resolved or rejected.
   writeChain = result.then(noop, noop)

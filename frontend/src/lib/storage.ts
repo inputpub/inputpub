@@ -1,7 +1,6 @@
 const DRAFT_KEY = 'inputpub.draft'
 const configKey = (destId: string, field: string) => `inputpub.config.${destId}.${field}`
 const enabledKey = (destId: string) => `inputpub.enabled.${destId}`
-const IMAGE_HOST_DEFAULT_KEY = 'inputpub.imagehost.default'
 const VAULT_INSTANCES_KEY = 'inputpub.vault.instances'
 const VAULT_ACTIVE_KEY = 'inputpub.vault.active'
 const VAULT_OPEN_FILE_KEY = 'inputpub.vault.openFile'
@@ -150,23 +149,6 @@ export function getAiPrompts(): AiPrompt[] {
 export function setAiPrompts(prompts: AiPrompt[]): void {
   try {
     localStorage.setItem(AI_PROMPTS_KEY, JSON.stringify(prompts))
-  } catch {
-    /* storage unavailable — ignore */
-  }
-}
-
-/** The id of the image host chosen as default for uploads (unset = none). */
-export function getImageHostDefault(): string | undefined {
-  try {
-    return localStorage.getItem(IMAGE_HOST_DEFAULT_KEY) ?? undefined
-  } catch {
-    return undefined
-  }
-}
-
-export function setImageHostDefault(id: string): void {
-  try {
-    localStorage.setItem(IMAGE_HOST_DEFAULT_KEY, id)
   } catch {
     /* storage unavailable — ignore */
   }

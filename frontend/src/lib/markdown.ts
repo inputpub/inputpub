@@ -146,9 +146,11 @@ function footnoteLinks(html: string): { html: string; refs: string[] } {
  * carries inline styles (the editor drops <style> and classes), outbound links
  * become numbered footnotes (see footnoteLinks, since WeChat won't keep them
  * live), and images keep their original `<img src>` URLs — the editor fetches
- * and re-hosts them on paste, so uploading to an image host first is what makes
- * them "land" in the published post. Drop the result on the clipboard as
- * `text/html` and paste it into a new article.
+ * and re-hosts them on paste, so only images at a publicly fetchable URL land
+ * in the published post. Images stored in the vault are referenced by relative
+ * path (see lib/vaultImages) and so will *not*: they'd have to be resolved to
+ * something public — or inlined — before this runs. Drop the result on the
+ * clipboard as `text/html` and paste it into a new article.
  */
 export function markdownToMpHtml(markdown: string): string {
   const rendered = micromark(markdown, {

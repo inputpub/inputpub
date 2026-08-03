@@ -2,9 +2,8 @@ import type { ReactNode } from 'react'
 import type { ConfigField } from '../destinations/types'
 
 // A vault is a connected external store (a GitHub repo today; something like
-// Google Drive could follow) browsed as a file tree and edited in place.
-// Mirrors the imagehosts registry, but for multi-file read/write instead of
-// one-shot binary uploads.
+// Google Drive could follow) browsed as a file tree and edited in place. It
+// holds the images pasted into those notes too — see lib/vaultImages.
 //
 // A VaultProvider is a *type* of store (e.g. "GitHub"); the user can connect
 // several independent *instances* of the same type (e.g. two different
@@ -119,6 +118,15 @@ export interface VaultProvider {
   readFile: (ctx: VaultContext, path: string) => Promise<VaultFile>
   /** Create (no `sha`) or update (with the current `sha`) a file. */
   writeFile: (ctx: VaultContext, path: string, content: string, sha?: string) => Promise<{ sha: string }>
+  /** Write raw bytes — for the images pasted into a note, which live in the
+   *  vault beside it. Separate from `writeFile` because that one takes text and
+   *  encodes it as UTF-8, which would corrupt binary. Always creates: callers
+   *  generate a unique name rather than overwriting. */
+  writeBinary: (ctx: VaultContext, path: string, bytes: ArrayBuffer) => Promise<void>
+  /** Read raw bytes back, so an image referenced by a relative path can be
+   *  shown in the editor (fetched with the vault's own credentials, which is
+   *  what makes this work for private repos). */
+  readBinary: (ctx: VaultContext, path: string) => Promise<Blob>
   /** Delete a file. Providers needing a current revision to delete (e.g.
    *  GitHub's sha) look it up themselves — callers only know the path. */
   deleteFile: (ctx: VaultContext, path: string) => Promise<void>

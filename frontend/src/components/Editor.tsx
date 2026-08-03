@@ -3,7 +3,7 @@ import { Crepe } from '@milkdown/crepe'
 import '@milkdown/crepe/theme/common/style.css'
 import '@milkdown/crepe/theme/frame.css'
 import './editor-theme.css' // our overrides — must load after the theme
-import { isImageHostConfigured, uploadImage } from '../lib/imageHost'
+import { canUploadVaultImages, resolveVaultImage, uploadVaultImage } from '../lib/vaultImages'
 import { stripEmptyLineBreaks } from '../lib/markdown'
 import { aiProvider, AiNotConfiguredError } from '../lib/ai'
 import { selectAllAsText } from '../lib/editorPlugins'
@@ -21,9 +21,9 @@ interface EditorProps {
   autoFocus?: boolean
   /** Called (debounced by Milkdown) whenever the markdown changes. */
   onChange?: (markdown: string) => void
-  /** Called when an image upload is attempted but no image host is configured,
-   *  so the app can offer to configure one (or go Pro). */
-  onImageUploadUnconfigured?: () => void
+  /** Called when an image is added while no repo file is open — images live in
+   *  the vault beside the note, so there's nowhere to put one yet. */
+  onImageUploadUnavailable?: () => void
   /** Called when an image upload fails, so the app can surface the error. */
   onImageUploadError?: (message: string) => void
   /** Called when the AI toolbar action is used but no AI provider is configured,
@@ -41,7 +41,7 @@ export function Editor({
   defaultValue,
   autoFocus,
   onChange,
-  onImageUploadUnconfigured,
+  onImageUploadUnavailable,
   onImageUploadError,
   onAiUnconfigured,
   onAiError,
@@ -56,10 +56,10 @@ export function Editor({
   useEffect(() => {
     onChangeRef.current = onChange
   }, [onChange])
-  const onUnconfiguredRef = useRef(onImageUploadUnconfigured)
+  const onUnconfiguredRef = useRef(onImageUploadUnavailable)
   useEffect(() => {
-    onUnconfiguredRef.current = onImageUploadUnconfigured
-  }, [onImageUploadUnconfigured])
+    onUnconfiguredRef.current = onImageUploadUnavailable
+  }, [onImageUploadUnavailable])
   const onUploadErrorRef = useRef(onImageUploadError)
   useEffect(() => {
     onUploadErrorRef.current = onImageUploadError
@@ -86,16 +86,16 @@ export function Editor({
   useEffect(() => {
     if (!rootRef.current) return
 
-    // Upload picked/pasted images to the configured image host and return the
-    // raw URL for the editor to embed. With no host configured, prompt the user
-    // (configure one, or go Pro) and insert nothing.
+    // Commit picked/pasted images into the vault and embed the *relative* path
+    // to them (see lib/vaultImages). Without a note open there's nothing for
+    // that path to be relative to, so prompt instead and insert nothing.
     const blockUpload = async (file: File): Promise<string> => {
-      if (!isImageHostConfigured()) {
+      if (!canUploadVaultImages()) {
         onUnconfiguredRef.current?.()
         return ''
       }
       try {
-        return await uploadImage(file)
+        return await uploadVaultImage(file)
       } catch (err) {
         onUploadErrorRef.current?.(err instanceof Error ? err.message : String(err))
         return ''
@@ -103,14 +103,14 @@ export function Editor({
     }
 
     // The "Upload file" control is a <label class="uploader"> that opens the OS
-    // file picker. When there's no host yet, catch the click in the capture
+    // file picker. With nowhere to save yet, catch the click in the capture
     // phase so we prompt *before* the picker opens instead of after a file is
-    // chosen. When a host is configured, let the picker open and the chosen
-    // file flow into blockUpload above.
+    // chosen. Otherwise let the picker open and the chosen file flow into
+    // blockUpload above.
     const root = rootRef.current
     const onUploaderClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null
-      if (target?.closest('.uploader') && !isImageHostConfigured()) {
+      if (target?.closest('.uploader') && !canUploadVaultImages()) {
         e.preventDefault()
         e.stopPropagation()
         onUnconfiguredRef.current?.()
@@ -138,6 +138,12 @@ export function Editor({
           blockOnUpload: blockUpload,
           inlineUploadPlaceholderText: 'Paste image link',
           blockUploadPlaceholderText: 'Paste image link',
+          // Vault images are stored as relative paths, which a browser would
+          // resolve against this site. Swap in an object URL fetched with the
+          // vault's credentials — display only: Crepe reads the node's src and
+          // assigns the result to the <img>, leaving the document untouched, so
+          // what gets saved stays the portable relative path.
+          proxyDomURL: resolveVaultImage,
         },
         [Crepe.Feature.AI]: {
           provider: aiProvider,
