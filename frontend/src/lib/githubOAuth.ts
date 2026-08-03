@@ -52,28 +52,19 @@ function closeQuietly(popup: Window): void {
   }
 }
 
-/** Whether this token can see any installation — i.e. whether the user has
- *  actually granted access to a repository, as opposed to merely authorizing
- *  the App. On any error this answers "yes": failing to tell is no reason to
- *  push someone through an extra permissions step they may not need. */
-async function hasInstallations(token: string): Promise<boolean> {
-  try {
-    const res = await fetch('https://api.github.com/user/installations?per_page=1', {
-      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
-      cache: 'no-store',
-    })
-    if (!res.ok) return true
-    const { total_count = 0 } = (await res.json()) as { total_count?: number }
-    return total_count > 0
-  } catch {
-    return true
-  }
-}
-
-/** Runs the popup authorize flow; resolves with a user access token. If the
- *  account comes back with no installation, the same popup continues to the
- *  App's install page so repo selection happens without a second trip. */
-export async function loginWithGitHub(): Promise<string> {
+/** Runs the popup authorize flow; resolves with a user access token.
+ *
+ *  `hasRepoAccess` is asked once the token exists, and when it answers false
+ *  the same popup carries on to the App's install page — so someone who
+ *  authorized without granting any repository picks one there and then,
+ *  instead of landing on an empty repo list with no idea what to do.
+ *
+ *  The caller supplies that check so it can run the very same query the repo
+ *  list does: "has an installation" isn't the same question, since authorizing
+ *  can leave an installation with no repositories selected. */
+export async function loginWithGitHub(
+  hasRepoAccess?: (token: string) => Promise<boolean>,
+): Promise<string> {
   if (!WORKER_URL) throw new Error('GitHub login isn’t configured')
   const state = crypto.randomUUID()
   const redirectUri = `${location.origin}/callback.html`
@@ -84,7 +75,7 @@ export async function loginWithGitHub(): Promise<string> {
   try {
     const code = await waitForCallback(popup, state)
     const token = await exchangeCode(code, redirectUri, WORKER_URL)
-    if (APP_SLUG && !(await hasInstallations(token))) {
+    if (APP_SLUG && hasRepoAccess && !(await hasRepoAccess(token))) {
       // Reusing this window rather than opening another: by now the click that
       // started all this is long over, and a fresh popup would be blocked.
       popup.location.href = installUrl(APP_SLUG, state)

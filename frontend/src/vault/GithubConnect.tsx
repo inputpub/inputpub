@@ -93,7 +93,16 @@ export function GithubConnect({
     setBusy(true)
     setError(null)
     try {
-      const t = await loginWithGitHub()
+      // The same query the repo list below runs, so "no repos to pick" and
+      // "send them to the picker" can never disagree. On failure say yes:
+      // being unable to tell is no reason to force an extra permissions step.
+      const t = await loginWithGitHub(async (token) => {
+        try {
+          return (await fetchRepos(token)).length > 0
+        } catch {
+          return true
+        }
+      })
       setGithubToken(t) // share with future vaults
       ctx.setConfig('token', t)
       setToken(t)
