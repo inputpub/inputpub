@@ -45,15 +45,18 @@ export interface VaultContext {
  *  before retrying rather than overwriting. */
 export class VaultConflictError extends Error {}
 
+// The tree lists every file in the vault. What differs is what opening one
+// does: text is editable, media is previewed, anything else can only be said
+// to be there. Hiding the rest would be worse — a file you can't see is one
+// you can't delete or even know about.
+
 /** Files the editor can open and edit. */
 export const TEXT_EXT = /\.(md|markdown|mdx|txt)$/i
 
-/** Files the tree shows but the editor can't edit — opening one previews it.
- *  Listed so pasted images aren't invisible: unlisted, an image could never be
- *  reviewed or deleted from here, and one orphaned by a deleted note would sit
- *  in the repo forever with nothing in the UI even hinting at it. */
+/** Files that can at least be shown, read-only. */
 export const MEDIA_EXT = /\.(png|jpe?g|gif|webp|avif|svg|bmp|ico|mp4|webm|mov|m4v|ogg)$/i
 
+export const isTextPath = (path: string) => TEXT_EXT.test(path)
 export const isMediaPath = (path: string) => MEDIA_EXT.test(path)
 
 /** Props a provider's custom connect UI receives (see `ConnectForm`). */
@@ -138,18 +141,18 @@ export interface VaultProvider {
   /** Delete a file. Providers needing a current revision to delete (e.g.
    *  GitHub's sha) look it up themselves — callers only know the path. */
   deleteFile: (ctx: VaultContext, path: string) => Promise<void>
-  /** Delete a whole directory and everything beneath it — including files the
-   *  tree doesn't surface (e.g. images, since `listTree` filters to TEXT_EXT).
-   *  Optional: lib/vault falls back to deleting the individually-listed files,
-   *  but that can't reach hidden files, so any provider that hides some (all of
-   *  them today) must implement this to fully remove a folder. */
+  /** Delete a whole directory and everything beneath it. Optional: lib/vault
+   *  falls back to deleting the individually-listed files, which now covers a
+   *  folder's whole contents since `listTree` hides nothing — but doing it in
+   *  one commit is still both faster and atomic. */
   deleteDir?: (ctx: VaultContext, path: string) => Promise<void>
   /** Rename/move a single file from one path to another. Optional: lib/vault
    *  falls back to read-write-delete (fine for the text files the tree shows). */
   moveFile?: (ctx: VaultContext, from: string, to: string) => Promise<void>
-  /** Rename/move a directory (and everything under it, including hidden files)
-   *  from one path prefix to another. Optional, but — like deleteDir — a
-   *  provider that hides non-text files should implement it so a folder rename
-   *  brings those along too. */
+  /** Rename/move a directory (and everything under it) from one path prefix to
+   *  another. Optional in name only: lib/vault's fallback moves files by
+   *  reading and rewriting them as text, which corrupts anything binary — and
+   *  the tree now lists images and video, so a folder can hold them. Implement
+   *  this rather than relying on that fallback. */
   moveDir?: (ctx: VaultContext, from: string, to: string) => Promise<void>
 }

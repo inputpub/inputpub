@@ -1,5 +1,5 @@
 import type { VaultContext, VaultEntry, VaultProvider } from './types'
-import { MEDIA_EXT, TEXT_EXT, VaultConflictError } from './types'
+import { VaultConflictError } from './types'
 import { GitHubIcon } from '../destinations/icons'
 import { GithubConnect } from './GithubConnect'
 
@@ -228,8 +228,7 @@ export const githubVault: VaultProvider = {
     const entries: VaultEntry[] = []
     for (const item of data.tree ?? []) {
       if (item.type === 'tree') entries.push({ path: item.path, type: 'dir' })
-      else if (item.type === 'blob' && (TEXT_EXT.test(item.path) || MEDIA_EXT.test(item.path)))
-        entries.push({ path: item.path, type: 'file' })
+      else if (item.type === 'blob') entries.push({ path: item.path, type: 'file' })
     }
     return entries
   },

@@ -51,8 +51,8 @@ import { AiPromptsDialog } from './components/dialogs/AiPromptsDialog'
 import { PromptDialog } from './components/dialogs/PromptDialog'
 import { SettingsDialog } from './components/dialogs/SettingsDialog'
 import { VaultSidebar } from './components/VaultSidebar'
-import { MediaPreview } from './components/MediaPreview'
-import { isMediaPath } from './vault'
+import { FilePreview } from './components/FilePreview'
+import { isTextPath } from './vault'
 import type { VaultSaveState } from './lib/vault'
 
 /** Delay before a clipboard destination opens the target, so the user reads the
@@ -108,9 +108,9 @@ function App() {
   // The path of the vault file currently loaded into the editor, if any —
   // when set, edits save to the vault instead of the local draft.
   const [vaultPath, setVaultPath] = useState<string | undefined>(undefined)
-  // A media file being previewed, shown instead of the editor while set. Kept
-  // apart from vaultPath so the open note — and its unsaved edits — survive a
-  // detour through an image.
+  // A non-editable file being previewed, shown instead of the editor while set.
+  // Kept apart from vaultPath so the open note — and its unsaved edits —
+  // survive a detour through an image.
   const [previewPath, setPreviewPath] = useState<string | null>(null)
   const [vaultSaveState, setVaultSaveState] = useState<VaultSaveState>('idle')
   const [enabledMap, setEnabledMap] = useState<Record<string, boolean>>(() => {
@@ -248,10 +248,11 @@ function App() {
   // Switch the shown path and clear the old content up front (with a spinner),
   // so a slow GitHub read doesn't leave the previous file lingering.
   async function openVaultPath(path: string) {
-    // Images and video can only be looked at. Show one *over* the open note
-    // rather than in place of it: the note stays open in lib/vault, so a staged
-    // edit still flushes and closing the preview returns to it untouched.
-    if (isMediaPath(path)) {
+    // Only text is editable; everything else is previewed (or reported as
+    // un-previewable). Show it *over* the open note rather than in place of it:
+    // the note stays open in lib/vault, so a staged edit still flushes and
+    // closing the preview returns to it untouched.
+    if (!isTextPath(path)) {
       setPreviewPath(path)
       return
     }
@@ -663,7 +664,7 @@ function App() {
                   onEditPrompts={() => setAiPromptsOpen(true)}
                 />
               </div>
-              {previewPath && <MediaPreview key={previewPath} path={previewPath} />}
+              {previewPath && <FilePreview key={previewPath} path={previewPath} />}
             </>
           )}
         </div>
