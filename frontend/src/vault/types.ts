@@ -141,18 +141,17 @@ export interface VaultProvider {
   /** Delete a file. Providers needing a current revision to delete (e.g.
    *  GitHub's sha) look it up themselves — callers only know the path. */
   deleteFile: (ctx: VaultContext, path: string) => Promise<void>
-  /** Delete a whole directory and everything beneath it. Optional: lib/vault
-   *  falls back to deleting the individually-listed files, which now covers a
-   *  folder's whole contents since `listTree` hides nothing — but doing it in
-   *  one commit is still both faster and atomic. */
-  deleteDir?: (ctx: VaultContext, path: string) => Promise<void>
-  /** Rename/move a single file from one path to another. Optional: lib/vault
-   *  falls back to read-write-delete (fine for the text files the tree shows). */
-  moveFile?: (ctx: VaultContext, from: string, to: string) => Promise<void>
-  /** Rename/move a directory (and everything under it) from one path prefix to
-   *  another. Optional in name only: lib/vault's fallback moves files by
-   *  reading and rewriting them as text, which corrupts anything binary — and
-   *  the tree now lists images and video, so a folder can hold them. Implement
-   *  this rather than relying on that fallback. */
-  moveDir?: (ctx: VaultContext, from: string, to: string) => Promise<void>
+  /** Delete a whole directory and everything beneath it. */
+  deleteDir: (ctx: VaultContext, path: string) => Promise<void>
+  /** Rename/move a single file from one path to another. */
+  moveFile: (ctx: VaultContext, from: string, to: string) => Promise<void>
+  /** Rename/move a directory and everything under it.
+   *
+   *  These three are required rather than optional because the generic
+   *  fallbacks they once had moved files by reading and rewriting them as
+   *  *text* — which silently corrupts anything binary, and the tree lists
+   *  images and video. No provider ever used them (both written so far move
+   *  natively), so they were a trap with no upside: a missing implementation
+   *  should fail to compile, not quietly mangle a folder of screenshots. */
+  moveDir: (ctx: VaultContext, from: string, to: string) => Promise<void>
 }

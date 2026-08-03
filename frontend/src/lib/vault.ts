@@ -371,25 +371,14 @@ export async function deleteVaultFile(path: string): Promise<void> {
   })
 }
 
-/** Delete a folder and everything under it. Prefers the provider's own
- *  `deleteDir` (which can reach files the tree hides); otherwise falls back to
- *  deleting the listed files under the prefix. */
+/** Delete a folder and everything under it. */
 export async function deleteVaultDir(path: string): Promise<void> {
   return withWriteLock(async () => {
     const active = activeVaultInstance()
     if (!active) throw new Error('No vault connected')
     const ctx = vaultCtxFor(active.id)
     const prefix = `${path}/`
-    if (active.provider.deleteDir) {
-      await active.provider.deleteDir(ctx, path)
-    } else {
-      const tree = await active.provider.listTree(ctx)
-      for (const entry of tree) {
-        if (entry.type === 'file' && entry.path.startsWith(prefix)) {
-          await active.provider.deleteFile(ctx, entry.path)
-        }
-      }
-    }
+    await active.provider.deleteDir(ctx, path)
     if (openPath && (openPath === path || openPath.startsWith(prefix))) clearOpenFile()
   })
 }
@@ -415,20 +404,12 @@ export async function renameVaultFile(from: string, to: string): Promise<void> {
     const active = activeVaultInstance()
     if (!active) throw new Error('No vault connected')
     const ctx = vaultCtxFor(active.id)
-    if (active.provider.moveFile) {
-      await active.provider.moveFile(ctx, from, to)
-    } else {
-      const file = await active.provider.readFile(ctx, from)
-      await active.provider.writeFile(ctx, to, file.content)
-      await active.provider.deleteFile(ctx, from)
-    }
+    await active.provider.moveFile(ctx, from, to)
     if (openPath === from) await repointOpenFile(to)
   })
 }
 
-/** Rename/move a folder and everything under it. Prefers the provider's
- *  `moveDir` (which can carry files the tree hides); otherwise moves the
- *  listed files one by one. */
+/** Rename/move a folder and everything under it. */
 export async function renameVaultDir(from: string, to: string): Promise<void> {
   return withWriteLock(async () => {
     await flushInternal().catch(() => {})
@@ -436,19 +417,7 @@ export async function renameVaultDir(from: string, to: string): Promise<void> {
     if (!active) throw new Error('No vault connected')
     const ctx = vaultCtxFor(active.id)
     const prefix = `${from}/`
-    if (active.provider.moveDir) {
-      await active.provider.moveDir(ctx, from, to)
-    } else {
-      const tree = await active.provider.listTree(ctx)
-      for (const entry of tree) {
-        if (entry.type === 'file' && entry.path.startsWith(prefix)) {
-          const dest = `${to}/${entry.path.slice(prefix.length)}`
-          const file = await active.provider.readFile(ctx, entry.path)
-          await active.provider.writeFile(ctx, dest, file.content)
-          await active.provider.deleteFile(ctx, entry.path)
-        }
-      }
-    }
+    await active.provider.moveDir(ctx, from, to)
     if (openPath && openPath.startsWith(prefix)) {
       await repointOpenFile(`${to}/${openPath.slice(prefix.length)}`)
     }
