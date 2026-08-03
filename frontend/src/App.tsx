@@ -14,6 +14,7 @@ import {
   ChevronLeftIcon,
   FolderIcon,
   SendIcon,
+  GitHubIcon,
 } from './destinations/icons'
 import { applyThemePref, getThemePref, nextThemePref, type ThemePref } from './lib/theme'
 import { renderTemplate, templateVars } from './lib/template'
@@ -81,9 +82,8 @@ function App() {
   const [status, setStatus] = useState<ToastStatus | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [toolsOpen, setToolsOpen] = useState(false)
-  // The tools menu drills into sub-views: "Publish" (the destination list) and
-  // "Settings" (AI config, which is noise for users who don't use it).
-  const [toolsView, setToolsView] = useState<'main' | 'publish' | 'settings'>('main')
+  // The tools menu drills into one sub-view: "Publish" (the destination list).
+  const [toolsView, setToolsView] = useState<'main' | 'publish'>('main')
   const [theme, setTheme] = useState<ThemePref>(getThemePref)
   const [aiProviderOpen, setAiProviderOpen] = useState(false)
   const [aiPromptsOpen, setAiPromptsOpen] = useState(false)
@@ -510,11 +510,22 @@ function App() {
                       Theme: {theme === 'system' ? 'System' : theme === 'light' ? 'Light' : 'Dark'}
                     </MenuItem>
                     <MenuItem
-                      icon={GearIcon}
-                      trailing={ChevronRightIcon}
-                      onClick={() => setToolsView('settings')}
+                      icon={SparklesIcon}
+                      onClick={() => {
+                        closeTools()
+                        setAiProviderOpen(true)
+                      }}
                     >
-                      Settings
+                      AI Provider
+                    </MenuItem>
+                    <MenuItem
+                      icon={EditIcon}
+                      onClick={() => {
+                        closeTools()
+                        setAiPromptsOpen(true)
+                      }}
+                    >
+                      AI Prompts
                     </MenuItem>
                     <MenuDivider />
                     <MenuItem
@@ -522,10 +533,17 @@ function App() {
                       href="https://bodhi.wtf/token/0xD6347200EEdB3f64bBdd2C363894dd043a24a488"
                       onClick={() => closeTools()}
                     >
-                      Feedback
+                      $INPUT
+                    </MenuItem>
+                    <MenuItem
+                      icon={GitHubIcon}
+                      href="https://github.com/inputpub/inputpub"
+                      onClick={() => closeTools()}
+                    >
+                      Source code
                     </MenuItem>
                   </>
-                ) : toolsView === 'publish' ? (
+                ) : (
                   <>
                     <MenuItem icon={ChevronLeftIcon} onClick={() => setToolsView('main')}>
                       Back
@@ -552,31 +570,6 @@ function App() {
                       }}
                     >
                       Customize
-                    </MenuItem>
-                  </>
-                ) : (
-                  <>
-                    <MenuItem icon={ChevronLeftIcon} onClick={() => setToolsView('main')}>
-                      Back
-                    </MenuItem>
-                    <MenuDivider />
-                    <MenuItem
-                      icon={SparklesIcon}
-                      onClick={() => {
-                        closeTools()
-                        setAiProviderOpen(true)
-                      }}
-                    >
-                      AI Provider
-                    </MenuItem>
-                    <MenuItem
-                      icon={EditIcon}
-                      onClick={() => {
-                        closeTools()
-                        setAiPromptsOpen(true)
-                      }}
-                    >
-                      AI Prompts
                     </MenuItem>
                   </>
                 )}
