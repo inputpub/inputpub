@@ -1,7 +1,7 @@
 import { activeVaultInstance, currentVaultFile, vaultCtxFor, withWriteLock } from './vault'
 
 // Images pasted into a note are committed to the vault beside it, and the note
-// links to them by *relative* path (`../images/foo.png`). That keeps a note
+// links to them by *relative* path (`../assets/foo.png`). That keeps a note
 // self-contained: it renders the same in Obsidian, in GitHub's own Markdown
 // view, and here — and it works for private repos, where an absolute raw URL
 // would need a credential the reader doesn't have.
@@ -11,10 +11,19 @@ import { activeVaultInstance, currentVaultFile, vaultCtxFor, withWriteLock } fro
 // only (Crepe's `proxyDomURL`), never writing the resolved URL back into the
 // document.
 
-/** One folder at the repo root, rather than files scattered beside each note —
- *  the sidebar hides images (listTree is text-only), so loose ones would be
- *  invisible and easy to orphan. */
-const IMAGE_DIR = 'images'
+/** Where new attachments are committed, per vault. One folder keeps them
+ *  together rather than scattered beside every note. Named for assets, not
+ *  images, since video lands here too — and deliberately without a leading
+ *  dot: Jekyll excludes dotfiles, so a repo published through GitHub Pages
+ *  would serve a note whose every image 404s. Changing it only steers new
+ *  uploads — notes link relatively, so what's already committed keeps
+ *  resolving wherever it sits. */
+const DEFAULT_ASSET_DIR = 'assets'
+
+function assetDir(instanceId: string): string {
+  const configured = (vaultCtxFor(instanceId).getConfig('assetDir') ?? '').trim()
+  return configured.replace(/^\/+|\/+$/g, '') || DEFAULT_ASSET_DIR
+}
 
 function sanitize(name: string): string {
   return (
@@ -40,7 +49,7 @@ function dirOf(path: string): string {
 const split = (p: string) => p.split('/').filter((s) => s && s !== '.')
 
 /** Express `to` (a repo path) relative to `fromDir`, so a note in a subfolder
- *  links to `../images/x.png` rather than a root-absolute path Obsidian and
+ *  links to `../assets/x.png` rather than a root-absolute path Obsidian and
  *  GitHub would each read differently. */
 function relativeFrom(fromDir: string, to: string): string {
   const from = split(fromDir)
@@ -98,7 +107,7 @@ export async function uploadVaultImage(file: File): Promise<string> {
   if (!active || notePath === undefined) {
     throw new Error('Open a file in your repo first — images are saved next to it.')
   }
-  const path = `${IMAGE_DIR}/${uniqueName(file.name)}`
+  const path = `${assetDir(active.id)}/${uniqueName(file.name)}`
   const bytes = await file.arrayBuffer()
   await withWriteLock(() => active.provider.writeBinary(vaultCtxFor(active.id), path, bytes))
   // Show it from the bytes we already hold rather than reading it back: right
@@ -106,6 +115,26 @@ export async function uploadVaultImage(file: File): Promise<string> {
   // is both slower and liable to 404.
   cache.set(keyFor(active.id, path), Promise.resolve(track(URL.createObjectURL(file))))
   return relativeFrom(dirOf(notePath), path)
+}
+
+/** An object URL for a file at a *repo* path — for previewing something picked
+ *  in the sidebar, where the path is already absolute rather than relative to
+ *  some note. Shares the cache with the editor's own image rendering. */
+export function vaultFileObjectUrl(path: string): Promise<string> {
+  const active = activeVaultInstance()
+  if (!active) return Promise.reject(new Error('No vault connected'))
+  const key = keyFor(active.id, path)
+  const hit = cache.get(key)
+  if (hit) return hit
+  const pending = active.provider
+    .readBinary(vaultCtxFor(active.id), path)
+    .then((blob) => track(URL.createObjectURL(blob)))
+    .catch((err) => {
+      cache.delete(key)
+      throw err
+    })
+  cache.set(key, pending)
+  return pending
 }
 
 /** The bytes behind a note's image link, as a data: URI — or undefined if the

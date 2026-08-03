@@ -65,6 +65,7 @@ export function GithubConnect({
   const [repo, setRepo] = useState(() => (ctx.getConfig('repo') ?? '').trim())
   const [branch, setBranch] = useState(() => (ctx.getConfig('branch') ?? '').trim())
   const [autosave, setAutosave] = useState(() => (ctx.getConfig('autosaveSeconds') ?? '').trim())
+  const [assetDir, setAssetDir] = useState(() => (ctx.getConfig('assetDir') ?? '').trim())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -141,6 +142,7 @@ export function GithubConnect({
   async function saveSettings() {
     ctx.setConfig('branch', branch.trim())
     ctx.setConfig('autosaveSeconds', autosave.trim())
+    ctx.setConfig('assetDir', assetDir.trim())
     await run()
   }
 
@@ -188,6 +190,17 @@ export function GithubConnect({
           value={branch}
           onChange={(e) => setBranch(e.target.value)}
         />
+        <label className="text-[0.78rem] text-muted">Asset folder</label>
+        <input
+          className={fieldCls}
+          placeholder="assets"
+          value={assetDir}
+          onChange={(e) => setAssetDir(e.target.value)}
+        />
+        <p className="m-0 text-[0.72rem] leading-snug text-muted">
+          Where pasted images and video are committed. Changing it only steers new ones — notes
+          link to them by relative path, so what is already in the repo keeps working.
+        </p>
         <label className="text-[0.78rem] text-muted">Auto-save after inactivity (seconds)</label>
         <input
           className={fieldCls}

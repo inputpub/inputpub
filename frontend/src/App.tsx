@@ -51,6 +51,8 @@ import { AiPromptsDialog } from './components/dialogs/AiPromptsDialog'
 import { PromptDialog } from './components/dialogs/PromptDialog'
 import { SettingsDialog } from './components/dialogs/SettingsDialog'
 import { VaultSidebar } from './components/VaultSidebar'
+import { MediaPreview } from './components/MediaPreview'
+import { isMediaPath } from './vault'
 import type { VaultSaveState } from './lib/vault'
 
 /** Delay before a clipboard destination opens the target, so the user reads the
@@ -106,6 +108,10 @@ function App() {
   // The path of the vault file currently loaded into the editor, if any —
   // when set, edits save to the vault instead of the local draft.
   const [vaultPath, setVaultPath] = useState<string | undefined>(undefined)
+  // A media file being previewed, shown instead of the editor while set. Kept
+  // apart from vaultPath so the open note — and its unsaved edits — survive a
+  // detour through an image.
+  const [previewPath, setPreviewPath] = useState<string | null>(null)
   const [vaultSaveState, setVaultSaveState] = useState<VaultSaveState>('idle')
   const [enabledMap, setEnabledMap] = useState<Record<string, boolean>>(() => {
     const m: Record<string, boolean> = {}
@@ -242,6 +248,14 @@ function App() {
   // Switch the shown path and clear the old content up front (with a spinner),
   // so a slow GitHub read doesn't leave the previous file lingering.
   async function openVaultPath(path: string) {
+    // Images and video can only be looked at. Show one *over* the open note
+    // rather than in place of it: the note stays open in lib/vault, so a staged
+    // edit still flushes and closing the preview returns to it untouched.
+    if (isMediaPath(path)) {
+      setPreviewPath(path)
+      return
+    }
+    setPreviewPath(null)
     const prev = vaultPath
     setVaultPath(path)
     setLoadingFile(true)
@@ -266,6 +280,9 @@ function App() {
 
   // A file was deleted in the sidebar — if it was open, fall back to the draft.
   function onVaultFileDeleted(path: string) {
+    if (previewPath === path || (previewPath && previewPath.startsWith(`${path}/`))) {
+      setPreviewPath(null)
+    }
     if (vaultPath === path) showDocument(loadDraft(), undefined)
   }
 
@@ -273,12 +290,14 @@ function App() {
   // (or lives under a renamed folder), re-point vaultPath so edits keep saving
   // to the right place. The content is unchanged, so no editor remount.
   function onVaultRenamed(from: string, to: string) {
-    setVaultPath((cur) => {
+    const repoint = <T extends string | undefined | null>(cur: T): T => {
       if (!cur) return cur
-      if (cur === from) return to
-      if (cur.startsWith(`${from}/`)) return `${to}/${cur.slice(from.length + 1)}`
+      if (cur === from) return to as T
+      if (cur.startsWith(`${from}/`)) return `${to}/${cur.slice(from.length + 1)}` as T
       return cur
-    })
+    }
+    setVaultPath(repoint)
+    setPreviewPath(repoint)
   }
 
   // The active vault changed (connected, switched, reconfigured, or
@@ -288,6 +307,7 @@ function App() {
     // Cached image blobs belong to the vault that's going away — drop them so a
     // path that exists in both repos can't show the old one's bytes.
     releaseVaultImages()
+    setPreviewPath(null)
     if (vaultPath) showDocument(loadDraft(), undefined)
   }
 
@@ -415,7 +435,7 @@ function App() {
       {vaultSidebarMounted && (
         <VaultSidebar
           visible={vaultSidebarOpen}
-          currentPath={vaultPath}
+          currentPath={previewPath ?? vaultPath}
           onOpen={(path) => void openVaultPath(path)}
           onCreated={onVaultFileCreated}
           onDeleted={onVaultFileDeleted}
@@ -569,10 +589,18 @@ function App() {
           squared bottom corners), then grows with content. */}
       <main className="flex min-h-dvh justify-center bg-backdrop px-[var(--page-pad)] pt-16">
         <div className="flex h-max min-h-[calc(100dvh-4rem)] w-full max-w-[var(--sheet-max)] flex-col border-[0.5px] shadow-md border-edge bg-paper px-[85px] py-12  max-[700px]:px-5 max-[700px]:pb-8 max-[700px]:pt-7">
-          {vaultPath && (
+          {(previewPath ?? vaultPath) && (
             <div className="mb-3 flex items-center gap-2 text-[0.78rem] text-nav-muted">
-              <span className="truncate">{vaultPath}</span>
-              {loadingFile ? (
+              <span className="truncate">{previewPath ?? vaultPath}</span>
+              {previewPath ? (
+                <button
+                  type="button"
+                  className="-my-1 -mr-1 shrink-0 cursor-pointer rounded px-1 py-1 opacity-70 hover:text-nav-active hover:opacity-100"
+                  onClick={() => setPreviewPath(null)}
+                >
+                  Close
+                </button>
+              ) : loadingFile ? (
                 <svg
                   className="size-[0.85em] shrink-0 animate-spin opacity-70"
                   viewBox="0 0 24 24"
@@ -611,23 +639,32 @@ function App() {
             // Old content cleared; the spinner beside the path shows progress.
             <div className="flex-1" />
           ) : (
-            <Editor
-              key={editorKey}
-              ref={editorRef}
-              defaultValue={seed}
-              autoFocus={focusMount}
-              onChange={onEditorChange}
-              onImageUploadUnavailable={() =>
-                setStatus({
-                  kind: 'error',
-                  text: 'Open a file in your repo first — images are saved into it.',
-                })
-              }
-              onImageUploadError={(text) => setStatus({ kind: 'error', text })}
-              onAiUnconfigured={() => setAiProviderOpen(true)}
-              onAiError={(text) => setStatus({ kind: 'error', text })}
-              onEditPrompts={() => setAiPromptsOpen(true)}
-            />
+            <>
+              {/* Hidden rather than unmounted while previewing: a remount would
+                  reseed the editor from the last *loaded* content, discarding
+                  anything typed since — and then emit that stale text as an
+                  edit. Looking at an image must not touch the open note. */}
+              <div className={`flex min-w-0 flex-1 flex-col ${previewPath ? 'hidden' : ''}`}>
+                <Editor
+                  key={editorKey}
+                  ref={editorRef}
+                  defaultValue={seed}
+                  autoFocus={focusMount}
+                  onChange={onEditorChange}
+                  onImageUploadUnavailable={() =>
+                    setStatus({
+                      kind: 'error',
+                      text: 'Open a file in your repo first — images are saved into it.',
+                    })
+                  }
+                  onImageUploadError={(text) => setStatus({ kind: 'error', text })}
+                  onAiUnconfigured={() => setAiProviderOpen(true)}
+                  onAiError={(text) => setStatus({ kind: 'error', text })}
+                  onEditPrompts={() => setAiPromptsOpen(true)}
+                />
+              </div>
+              {previewPath && <MediaPreview key={previewPath} path={previewPath} />}
+            </>
           )}
         </div>
       </main>

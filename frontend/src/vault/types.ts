@@ -45,8 +45,16 @@ export interface VaultContext {
  *  before retrying rather than overwriting. */
 export class VaultConflictError extends Error {}
 
-/** Files shown in a vault tree — the editor only handles text/Markdown. */
+/** Files the editor can open and edit. */
 export const TEXT_EXT = /\.(md|markdown|mdx|txt)$/i
+
+/** Files the tree shows but the editor can't edit — opening one previews it.
+ *  Listed so pasted images aren't invisible: unlisted, an image could never be
+ *  reviewed or deleted from here, and one orphaned by a deleted note would sit
+ *  in the repo forever with nothing in the UI even hinting at it. */
+export const MEDIA_EXT = /\.(png|jpe?g|gif|webp|avif|svg|bmp|ico|mp4|webm|mov|m4v|ogg)$/i
+
+export const isMediaPath = (path: string) => MEDIA_EXT.test(path)
 
 /** Props a provider's custom connect UI receives (see `ConnectForm`). */
 export interface VaultConnectProps {

@@ -10,4 +10,4 @@ export const vaultProviders: VaultProvider[] = [githubVault]
 export const vaultNs = (id: string) => `vault.${id}`
 
 export type { VaultProvider, VaultEntry, VaultFile, VaultContext, ConfigField } from './types'
-export { VaultConflictError } from './types'
+export { VaultConflictError, isMediaPath } from './types'
