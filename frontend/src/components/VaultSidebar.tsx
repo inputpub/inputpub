@@ -74,6 +74,17 @@ const rowCls =
 const iconCls =
   'inline-flex w-[1.1rem] shrink-0 items-center justify-center text-[0.95rem] [&_svg]:block [&_svg]:size-[1em]'
 
+// A trailing ".ext" on a file name. Anchored past the first character so a
+// dotfile ("\.gitignore") reads as a name, not as a bare extension.
+const EXT = /.\.([^./]+)$/
+
+const hasExtension = (name: string) => EXT.test(name)
+/** The extension including its dot ('' when there isn't one). */
+const extensionOf = (name: string) => {
+  const match = EXT.exec(name)
+  return match ? `.${match[1]}` : ''
+}
+
 /** An instance's short display name — its provider's own identifying config
  *  (e.g. a repo or folder name) when available, else the provider's name. */
 function instanceLabel(instance: VaultInstance): string {
@@ -638,8 +649,14 @@ export function VaultSidebar({
     const slash = target.path.lastIndexOf('/')
     const parentDir = slash === -1 ? '' : target.path.slice(0, slash)
     let dest = parentDir ? `${parentDir}/${name}` : name
-    // Keep files as Markdown even if the user drops the extension while editing.
-    if (target.type === 'file' && !/\.md$/i.test(dest)) dest += '.md'
+    // Carry the old extension over when the new name drops it, so editing a
+    // name doesn't silently change the kind of file. Not always ".md": doing
+    // that to an image made it "photo.png.md", which then failed to open — and
+    // leaving a file extensionless is no better, since the tree only lists
+    // known text and media suffixes and it would simply vanish from view.
+    if (target.type === 'file' && !hasExtension(name)) {
+      dest += extensionOf(target.name)
+    }
     cancelRename()
     await moveNode(target, dest, `Renaming ${target.name} → ${name}…`, `Renamed to ${dest.split('/').pop()}`)
   }
