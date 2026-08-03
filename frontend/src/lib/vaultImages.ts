@@ -94,6 +94,18 @@ export function releaseVaultImages(): void {
   cache.clear()
 }
 
+// Uploads happen inside the editor, where the file tree can't see them, so it
+// would keep showing an asset folder without the image just added to it.
+const uploadListeners = new Set<(path: string) => void>()
+
+/** Subscribe to images committed from the editor. Returns an unsubscribe. */
+export function onVaultImageUploaded(fn: (path: string) => void): () => void {
+  uploadListeners.add(fn)
+  return () => {
+    uploadListeners.delete(fn)
+  }
+}
+
 /** Images need a repo to live in *and* an open note to be relative to, so this
  *  is false while editing the local draft. */
 export function canUploadVaultImages(): boolean {
@@ -114,6 +126,7 @@ export async function uploadVaultImage(file: File): Promise<string> {
   // after a commit GitHub can still serve the pre-write tree, so a re-read here
   // is both slower and liable to 404.
   cache.set(keyFor(active.id, path), Promise.resolve(track(URL.createObjectURL(file))))
+  for (const fn of uploadListeners) fn(path)
   return relativeFrom(dirOf(notePath), path)
 }
 

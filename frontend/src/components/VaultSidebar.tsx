@@ -23,6 +23,7 @@ import { CheckIcon, EditIcon, GearIcon, PlusIcon, TrashIcon } from '../destinati
 import { Field } from './Field'
 import { Menu, MenuDivider, MenuItem } from './Menu'
 import { useDismiss } from '../lib/useDismiss'
+import { onVaultImageUploaded } from '../lib/vaultImages'
 
 interface TreeNode {
   name: string
@@ -589,6 +590,19 @@ export function VaultSidebar({
     // handleDelete).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, activeId])
+
+  // Images are committed from inside the editor, so the tree never hears about
+  // them. Add the entry directly rather than refetching: GitHub can still serve
+  // the pre-write tree right after a commit, which would drop it again.
+  useEffect(
+    () =>
+      onVaultImageUploaded((path) => {
+        setEntries((prev) =>
+          !prev || prev.some((e) => e.path === path) ? prev : [...prev, { path, type: 'file' }],
+        )
+      }),
+    [],
+  )
 
   const tree = useMemo(() => (entries ? buildTree(entries) : []), [entries])
 
