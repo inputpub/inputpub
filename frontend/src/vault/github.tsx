@@ -76,6 +76,60 @@ function contentsUrl(repo: string, path: string, ref?: string): string {
   return ref ? `${base}?ref=${encodeURIComponent(ref)}` : base
 }
 
+/** GitHub's trees API refuses a repo that has no commit yet — a fresh repo
+ *  created with no README — with 409 "Git Repository is empty.". That's a
+ *  fine state for a vault to start from, so rather than erroring, seed the
+ *  repo with an initial commit and read the tree again. */
+const EMPTY_REPO_409 = 'Git Repository is empty.'
+
+function isEmptyRepoError(status: number, detail: string): boolean {
+  return status === 409 && detail.includes(EMPTY_REPO_409)
+}
+
+/** Create the initial commit in an empty repo: a README via the Contents API
+ *  (passing `branch`, which makes GitHub create that branch too). The Git
+ *  Data endpoints (tree/commit/ref) all refuse writes on an empty repo with
+ *  the same 409, so this PUT is the one sanctioned way in. */
+async function initEmptyRepo(repo: string, token: string, branch: string): Promise<void> {
+  const res = await fetch(contentsUrl(repo, 'README.md'), {
+    method: 'PUT',
+    headers: headers(token),
+    body: JSON.stringify({
+      message: 'chore: initialize repository',
+      content: toBase64(
+        'Initialized by [InputPub](https://inputpub.com) so this repository can hold notes and files.\n',
+      ),
+      branch,
+    }),
+  })
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '')
+    throw new Error(
+      `Couldn't initialize the repository (${res.status})${detail ? `: ${detail.slice(0, 140)}` : ''}`,
+    )
+  }
+}
+
+/** GET a repo's tree, seeding the repo with an initial commit first if it's
+ *  empty (see above). If two tabs race to initialize, the loser's PUT 409s
+ *  because the README already exists — that's fine if the re-read succeeds,
+ *  so a failed init only surfaces when the re-read still can't load. */
+async function treeWithInit(repo: string, token: string, branch: string): Promise<Response> {
+  const url = `https://api.github.com/repos/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`
+  const first = await ghGet(url, token)
+  if (first.status !== 409) return first
+  const detail = await first.text().catch(() => '')
+  if (!isEmptyRepoError(first.status, detail)) return first
+  try {
+    await initEmptyRepo(repo, token, branch)
+  } catch (initErr) {
+    const retry = await ghGet(url, token)
+    if (retry.ok) return retry
+    throw initErr
+  }
+  return ghGet(url, token)
+}
+
 /**
  * Rename/move a file or a whole directory in one commit via the Git Data API.
  * `from` matches either an exact blob (file) or a path prefix (directory); the
@@ -97,7 +151,18 @@ async function gitMove(ctx: VaultContext, from: string, to: string): Promise<voi
   // than force-pushing (which would drop that concurrent commit).
   for (let attempt = 0; ; attempt++) {
     const refRes = await ghGet(`${api}/git/ref/${ref}`, token)
-    if (!refRes.ok) throw new Error(`Couldn't read the branch (${refRes.status})`)
+    if (!refRes.ok) {
+      const detail = await refRes.text().catch(() => '')
+      // An empty repo has no ref at all; the tree readers seed one on their
+      // own, but guard here too so a move can't trip over the 409 first.
+      if (attempt === 0 && isEmptyRepoError(refRes.status, detail)) {
+        await initEmptyRepo(repo, token, branch).catch(() => {})
+        continue
+      }
+      throw new Error(
+        `Couldn't read the branch (${refRes.status})${detail ? `: ${detail.slice(0, 140)}` : ''}`,
+      )
+    }
     const commitSha = ((await refRes.json()) as { object?: { sha?: string } }).object?.sha
     if (!commitSha) throw new Error('Unexpected response reading the branch')
 
@@ -214,10 +279,7 @@ export const githubVault: VaultProvider = {
   async listTree(ctx) {
     const { repo, token } = repoAndToken(ctx)
     const branch = await resolveBranch(ctx, repo, token)
-    const res = await ghGet(
-      `https://api.github.com/repos/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
-      token,
-    )
+    const res = await treeWithInit(repo, token, branch)
     if (!res.ok) {
       const detail = await res.text().catch(() => '')
       throw new Error(
@@ -330,10 +392,7 @@ export const githubVault: VaultProvider = {
     // The tree lists *every* blob (not just the text files the sidebar shows),
     // so this also removes images/PDFs that would otherwise keep the folder
     // alive — git has no empty directories.
-    const res = await ghGet(
-      `https://api.github.com/repos/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
-      token,
-    )
+    const res = await treeWithInit(repo, token, branch)
     if (!res.ok) {
       const detail = await res.text().catch(() => '')
       throw new Error(
