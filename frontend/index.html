@@ -5,7 +5,13 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover is what makes env(safe-area-inset-*) mean anything:
+         without it iOS insets the web view to the safe area, every inset reads
+         as 0, and the strip behind the status bar isn't the page's to paint —
+         so a full-height drawer stopped short of it and the system's own colour
+         showed through. With cover the page owns the whole screen, and the
+         insets (top bar, sheet, toast, dialog, drawer) do the keeping-clear. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <!-- Match the iOS status-bar / dynamic-island area to the page backdrop -->
     <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
