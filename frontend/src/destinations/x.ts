@@ -21,7 +21,13 @@ export const x: Destination = {
   ],
   send(_markdown, ctx) {
     const text = ctx.slot('text')
-    const url = `https://x.com/intent/post?text=${encodeURIComponent(text)}`
+    // /intent/tweet, not the newer /intent/post, however dated the word looks.
+    // X's app claims every x.com link, but only routes the paths it knows to a
+    // native screen — and /intent/post isn't one of them, so on a phone it
+    // opened the app only to dump the page into its in-app browser. /intent/tweet
+    // is the path that has always mapped to the native composer, and it still
+    // serves the same page on the web.
+    const url = `https://x.com/intent/tweet?text=${encodeURIComponent(text)}`
     window.open(url, '_blank', 'noopener,noreferrer')
     return 'Opened the X compose window'
   },
