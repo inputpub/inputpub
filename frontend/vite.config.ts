@@ -11,11 +11,14 @@ import tailwindcss from '@tailwindcss/vite'
 // - connect-src stays open: the AI provider / S3 endpoints are user-configured
 //   arbitrary hosts, so it can't be pinned to a list.
 // - style-src allows inline: the editor (Crepe) writes style attributes.
+// - script-src lets in static.cloudflareinsights.com: Cloudflare Web Analytics
+//   appends its beacon to the HTML in flight, so blocking it only produces a
+//   console error and no stats.
 // Injected only at build time — in dev, @vitejs/plugin-react needs an inline
 // preamble script that `script-src 'self'` would block.
 const CSP = [
   "default-src 'self'",
-  "script-src 'self'",
+  "script-src 'self' https://static.cloudflareinsights.com",
   "style-src 'self' 'unsafe-inline'",
   'img-src * data: blob:',
   'media-src * data: blob:',
