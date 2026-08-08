@@ -4,8 +4,11 @@ import type { ReactNode } from 'react'
 // its open state live with each caller (they differ); this owns the panel and
 // item styling. Dismissal is handled by the caller via useDismiss.
 
+// Capped and scrollable: the publish menu lists every destination, which is
+// taller than a phone in landscape — without this its last items sit off-screen
+// with no way to reach them.
 const menuCls =
-  'absolute z-20 top-[calc(100%+0.5rem)] flex min-w-[184px] flex-col gap-[0.15rem] rounded-lg border border-line bg-surface p-[0.3rem] shadow-[0_4px_20px_rgba(0,0,0,0.12)]'
+  'absolute z-20 top-[calc(100%+0.5rem)] flex max-h-[min(70dvh,28rem)] min-w-[184px] flex-col gap-[0.15rem] overflow-y-auto overscroll-contain rounded-lg border border-line bg-surface p-[0.3rem] shadow-[0_4px_20px_rgba(0,0,0,0.12)]'
 const itemCls =
   'flex cursor-pointer items-center gap-[0.6rem] rounded-lg px-[0.7rem] py-[0.55rem] text-left hover:bg-hover'
 const itemIconCls =

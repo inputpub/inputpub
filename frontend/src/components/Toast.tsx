@@ -10,7 +10,8 @@ export function Toast({ status }: { status: ToastStatus }) {
       } ${
         status.big
           ? 'top-1/2 max-w-[min(90vw,30rem)] -translate-y-1/2 px-[1.4rem] py-4 text-center text-base leading-[1.45] shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
-          : 'bottom-6 px-4 py-[0.55rem] text-[0.85rem] shadow-[0_4px_16px_rgba(0,0,0,0.25)]'
+          : // Clear of the home indicator when installed to the Home Screen.
+            'bottom-[calc(1.5rem+env(safe-area-inset-bottom))] px-4 py-[0.55rem] text-[0.85rem] shadow-[0_4px_16px_rgba(0,0,0,0.25)]'
       }`}
       role="status"
     >

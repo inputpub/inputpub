@@ -93,3 +93,47 @@ body,
 ::selection {
   background: var(--selection);
 }
+
+/* iOS Safari zooms the page in whenever a focused field's text is under 16px,
+   and never zooms back out — which left the app zoomed after every config
+   dialog or file rename. Sizing up only on touch keeps the smaller type on
+   desktop. These rules sit outside Tailwind's layers, so they win over the
+   utilities on the elements themselves without needing !important. */
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+/* Row actions in the vault tree (rename, delete, new file) appear on hover.
+   Touch devices have no hover to reveal them with, so there they stay visible —
+   otherwise those actions are unreachable on a phone. Two variants because the
+   tree rows can afford to reflow (display) while the sidebar header can't: its
+   buttons sit next to a flexible label that would jump on hover (visibility). */
+.row-action {
+  display: inline-flex;
+}
+
+.header-action {
+  visibility: visible;
+}
+
+@media (hover: hover) {
+  .row-action {
+    display: none;
+  }
+
+  .group:hover .row-action {
+    display: inline-flex;
+  }
+
+  .header-action {
+    visibility: hidden;
+  }
+
+  .group:hover .header-action {
+    visibility: visible;
+  }
+}

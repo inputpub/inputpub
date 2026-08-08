@@ -5,9 +5,13 @@ import { useEffect, type ButtonHTMLAttributes, type ReactNode } from 'react'
 // (ModalTitle / ModalNote / ModalActions / Button) so each dialog only writes
 // its own body.
 
-const overlayCls = 'fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4'
+// dvh, not vh: on iOS `vh` counts the area behind the retracted URL bar, so an
+// 85vh dialog could still run off the bottom of what's actually visible. The
+// insets keep it clear of the notch and home indicator in standalone mode.
+const overlayCls =
+  'fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]'
 const dialogCls =
-  'flex max-h-[85vh] w-full max-w-[420px] flex-col gap-[0.8rem] rounded-xl border border-line bg-surface p-[1.2rem]'
+  'flex max-h-[85dvh] w-full max-w-[420px] flex-col gap-[0.8rem] rounded-xl border border-line bg-surface p-[1.2rem]'
 const titleCls = 'm-0 text-[1.05rem]'
 const noteCls = 'm-0 text-[0.78rem] text-muted'
 const actionsCls = 'flex justify-end gap-2'

@@ -19,9 +19,17 @@ import {
   vaultCtxFor,
   type VaultInstance,
 } from '../lib/vault'
-import { CheckIcon, EditIcon, GearIcon, PlusIcon, TrashIcon } from '../destinations/icons'
+import {
+  CheckIcon,
+  EditIcon,
+  FolderIcon,
+  GearIcon,
+  PlusIcon,
+  TrashIcon,
+} from '../destinations/icons'
 import { Field } from './Field'
 import { Menu, MenuDivider, MenuItem } from './Menu'
+import { Button, Modal, ModalActions, ModalNote, ModalTitle } from './Modal'
 import { useDismiss } from '../lib/useDismiss'
 import { onVaultImageUploaded } from '../lib/vaultImages'
 
@@ -70,10 +78,31 @@ function buildTree(entries: VaultEntry[]): TreeNode[] {
   return root.children
 }
 
+/** Below this width the sidebar overlays the sheet instead of sitting in the
+ *  gutter beside it, and so behaves as a drawer. Kept in step by hand with the
+ *  `max-[1340px]` classes on the container below — App reads it to decide the
+ *  matching behaviour (see sidebarIsDrawer). Written as a range query because
+ *  that's exactly what Tailwind's `max-*` compiles to (`width < 1340px`);
+ *  `max-width: 1340px` would include 1340 and disagree at that one pixel. */
+export const SIDEBAR_DRAWER_QUERY = '(width < 1340px)'
+
+// Rows get roomier on touch: at the pointer-fine height they're ~28px, well
+// under the ~44px a fingertip needs, which made picking a file out of a dense
+// tree a coin toss.
 const rowCls =
-  'group flex w-full cursor-pointer items-center gap-[0.4rem] rounded-md px-[0.4rem] py-[0.3rem] text-left text-[0.84rem] hover:text-nav-active'
+  'group flex w-full cursor-pointer items-center gap-[0.4rem] rounded-md px-[0.4rem] py-[0.3rem] text-left text-[0.84rem] pointer-coarse:py-[0.5rem] hover:text-nav-active'
 const iconCls =
   'inline-flex w-[1.1rem] shrink-0 items-center justify-center text-[0.95rem] [&_svg]:block [&_svg]:size-[1em]'
+// The small action buttons on rows and in the header. How they're revealed is
+// the part that differs: `row-action` / `header-action` (see index.css) hide
+// them until hover *only where hover exists*, so a touch device — which has no
+// way to reveal them — keeps them on screen. The move button is the inverse: it
+// exists only for touch, since dragging covers it everywhere else.
+const actionCls =
+  'shrink-0 rounded p-[0.15rem] text-muted opacity-70 pointer-coarse:p-[0.4rem] hover:bg-line hover:text-text hover:opacity-100 [&_svg]:block [&_svg]:size-[0.85em]'
+const rowActionCls = `row-action ${actionCls}`
+const headerActionCls = `header-action inline-flex cursor-pointer items-center justify-center ${actionCls}`
+const moveActionCls = `hidden pointer-coarse:inline-flex ${actionCls}`
 
 // A trailing ".ext" on a file name. Anchored past the first character so a
 // dotfile ("\.gitignore") reads as a name, not as a bare extension.
@@ -84,6 +113,29 @@ const hasExtension = (name: string) => EXT.test(name)
 const extensionOf = (name: string) => {
   const match = EXT.exec(name)
   return match ? `.${match[1]}` : ''
+}
+
+/** Every folder in the tree as a flat list of paths, depth-first ('' = root). */
+function folderPaths(nodes: TreeNode[]): string[] {
+  const out = ['']
+  const walk = (list: TreeNode[]) => {
+    for (const node of list) {
+      if (node.type !== 'dir') continue
+      out.push(node.path)
+      walk(node.children)
+    }
+  }
+  walk(nodes)
+  return out
+}
+
+/** Whether `node` can be moved into the folder at `folderPath` ('' = root):
+ *  not into itself or its own descendants, and not back where it already is. */
+function canMoveInto(node: TreeNode, folderPath: string): boolean {
+  if (node.type === 'dir' && (folderPath === node.path || folderPath.startsWith(`${node.path}/`)))
+    return false
+  const slash = node.path.lastIndexOf('/')
+  return (slash === -1 ? '' : node.path.slice(0, slash)) !== folderPath
 }
 
 /** An instance's short display name — its provider's own identifying config
@@ -195,6 +247,31 @@ function NewFileInput({
   )
 }
 
+/** Moving a node is drag-and-drop on desktop, but HTML5 drag events never fire
+ *  for touch — so touch gets this instead, opening a folder picker. Hidden
+ *  where dragging already works, to spare those rows a fourth control. */
+function MoveButton({
+  node,
+  onRequest,
+}: {
+  node: TreeNode
+  onRequest: (node: TreeNode) => void
+}) {
+  return (
+    <button
+      type="button"
+      className={moveActionCls}
+      title="Move to folder"
+      onClick={(e) => {
+        e.stopPropagation()
+        onRequest(node)
+      }}
+    >
+      {FolderIcon}
+    </button>
+  )
+}
+
 function Row({
   node,
   depth,
@@ -204,6 +281,7 @@ function Row({
   drag,
   onOpen,
   onDelete,
+  onMove,
 }: {
   node: TreeNode
   depth: number
@@ -213,6 +291,7 @@ function Row({
   drag: DragState
   onOpen: (path: string) => void
   onDelete: (node: TreeNode) => void
+  onMove: (node: TreeNode) => void
 }) {
   const renaming = rename.targetPath === node.path
   // Shared drag-source handlers for both file and folder rows. Disabled while
@@ -282,7 +361,7 @@ function Row({
               <span className="min-w-0 flex-1 truncate">{node.name}</span>
               <button
                 type="button"
-                className="ml-auto hidden shrink-0 rounded p-[0.15rem] text-muted opacity-70 hover:bg-line hover:text-text hover:opacity-100 group-hover:inline-flex [&_svg]:block [&_svg]:size-[0.85em]"
+                className={`ml-auto ${rowActionCls}`}
                 title="New file in this folder"
                 onClick={(e) => {
                   e.stopPropagation()
@@ -294,7 +373,7 @@ function Row({
               </button>
               <button
                 type="button"
-                className="hidden shrink-0 rounded p-[0.15rem] text-muted opacity-70 hover:bg-line hover:text-text hover:opacity-100 group-hover:inline-flex [&_svg]:block [&_svg]:size-[0.85em]"
+                className={rowActionCls}
                 title="Rename folder"
                 onClick={(e) => {
                   e.stopPropagation()
@@ -303,9 +382,10 @@ function Row({
               >
                 {EditIcon}
               </button>
+              <MoveButton node={node} onRequest={onMove} />
               <button
                 type="button"
-                className="hidden shrink-0 rounded p-[0.15rem] text-muted opacity-70 hover:bg-line hover:text-text hover:opacity-100 group-hover:inline-flex [&_svg]:block [&_svg]:size-[0.85em]"
+                className={rowActionCls}
                 title="Delete folder"
                 onClick={(e) => {
                   e.stopPropagation()
@@ -341,6 +421,7 @@ function Row({
                 drag={drag}
                 onOpen={onOpen}
                 onDelete={onDelete}
+                onMove={onMove}
               />
             ))}
           </div>
@@ -370,7 +451,7 @@ function Row({
           <span className="min-w-0 flex-1 truncate">{node.name}</span>
           <button
             type="button"
-            className="ml-auto hidden shrink-0 rounded p-[0.15rem] text-muted opacity-70 hover:bg-line hover:text-text hover:opacity-100 group-hover:inline-flex [&_svg]:block [&_svg]:size-[0.85em]"
+            className={`ml-auto ${rowActionCls}`}
             title="Rename file"
             onClick={(e) => {
               e.stopPropagation()
@@ -379,9 +460,10 @@ function Row({
           >
             {EditIcon}
           </button>
+          <MoveButton node={node} onRequest={onMove} />
           <button
             type="button"
-            className="hidden shrink-0 rounded p-[0.15rem] text-muted opacity-70 hover:bg-line hover:text-text hover:opacity-100 group-hover:inline-flex [&_svg]:block [&_svg]:size-[0.85em]"
+            className={rowActionCls}
             title="Delete file"
             onClick={(e) => {
               e.stopPropagation()
@@ -488,6 +570,50 @@ function ConfigureForm({
   )
 }
 
+/** Destination picker behind the rows' move button. Lists the folders the node
+ *  can legally land in, so touch users get the same reach as a drag. */
+function MoveDialog({
+  node,
+  folders,
+  onMove,
+  onCancel,
+}: {
+  node: TreeNode
+  folders: string[]
+  onMove: (folderPath: string) => void
+  onCancel: () => void
+}) {
+  return (
+    <Modal onClose={onCancel}>
+      <ModalTitle>Move “{node.name}”</ModalTitle>
+      {folders.length === 0 ? (
+        <ModalNote>There's nowhere else to put it — the vault has no other folder.</ModalNote>
+      ) : (
+        <>
+          <ModalNote>Pick the folder to move it into.</ModalNote>
+          <div className="-mx-1 flex min-h-0 flex-col gap-[0.1rem] overflow-y-auto px-1">
+            {folders.map((path) => (
+              <button
+                key={path}
+                type="button"
+                className="cursor-pointer truncate rounded-md px-[0.6rem] py-[0.5rem] text-left text-[0.85rem] text-nav-muted hover:bg-hover hover:text-nav-active"
+                onClick={() => onMove(path)}
+              >
+                {path === '' ? 'Top level' : path}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      <ModalActions>
+        <Button variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+      </ModalActions>
+    </Modal>
+  )
+}
+
 /** A fresh (not-yet-saved) instance for connecting a new vault of this type. */
 function pendingInstance(provider: VaultProvider): VaultInstance {
   return { id: generateVaultInstanceId(provider.id), provider }
@@ -501,6 +627,7 @@ function defaultConfigTarget(): VaultInstance {
 
 export function VaultSidebar({
   visible,
+  onClose,
   currentPath,
   onOpen,
   onCreated,
@@ -513,6 +640,8 @@ export function VaultSidebar({
    *  display:none'd) so its loaded file tree survives a close/reopen without
    *  re-fetching — see App's vaultSidebarMounted. */
   visible: boolean
+  /** Dismissed from within — currently the drawer scrim (see SIDEBAR_DRAWER_QUERY). */
+  onClose: () => void
   currentPath: string | undefined
   onOpen: (path: string) => void
   onCreated: (path: string) => void
@@ -557,6 +686,9 @@ export function VaultSidebar({
   // hovered as a drop target ('' = tree root, null = none).
   const [dragNode, setDragNode] = useState<TreeNode | null>(null)
   const [dragOver, setDragOver] = useState<string | null>(null)
+  // The node whose destination folder is being picked (the touch equivalent of
+  // a drag — see MoveButton).
+  const [moveTarget, setMoveTarget] = useState<TreeNode | null>(null)
   const [opMsg, setOpMsg] = useState<{ text: string; done: boolean } | null>(null)
   const opMsgTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const switcherRef = useRef<HTMLDivElement>(null)
@@ -676,15 +808,10 @@ export function VaultSidebar({
   }
 
   // Drop a dragged node into a folder ('' = tree root): move it there under its
-  // own name. Guards against dropping a folder into itself/a descendant and
-  // against a no-op move into its current parent.
+  // own name. canMoveInto has the rules — shared with the move dialog, which
+  // uses them to decide which folders to even offer.
   function canDropInto(folderPath: string): boolean {
-    const n = dragNode
-    if (!n) return false
-    if (n.type === 'dir' && (folderPath === n.path || folderPath.startsWith(`${n.path}/`))) return false
-    const slash = n.path.lastIndexOf('/')
-    const parentDir = slash === -1 ? '' : n.path.slice(0, slash)
-    return parentDir !== folderPath
+    return !!dragNode && canMoveInto(dragNode, folderPath)
   }
   function dropInto(folderPath: string) {
     const n = dragNode
@@ -880,207 +1007,235 @@ export function VaultSidebar({
   }
 
   return (
-    // Floats beside the sheet's left edge rather than hugging the viewport —
-    // its position is derived from the same --sheet-max / --page-pad vars the
-    // sheet and top bar use, so it tracks the sheet as the window resizes.
-    // Below ~14rem of clearance (narrow windows) it clamps to --page-pad from
-    // the viewport edge instead of overlapping the sheet.
-    //
-    // Background: bg-backdrop matches the canvas, so on wide screens the tree
-    // reads as bare text floating in the gutter — but it's opaque, so once the
-    // window narrows enough to overlap the sheet, it occludes the text behind
-    // it instead of bleeding through. At that point (~1340px) it also takes a
-    // border + shadow so it reads as a deliberate docked panel, not a stray box.
-    <div className={`fixed top-16 bottom-4 z-30 w-52 flex-col bg-backdrop left-[max(var(--page-pad),calc(50%-var(--sheet-max)/2-13.5rem))] max-[1340px]:border max-[1340px]:border-line max-[1340px]:bg-surface max-[1340px]:shadow ${visible ? 'flex' : 'hidden'}`}>
-      {/* Only while browsing: mid-connect (logging in, or adding a repo) there's
-          no vault to switch away from, and the connect form supplies its own
-          "GitHub" heading — so the switcher would be inert and redundant. */}
-      {view === 'browse' && (
-        <div className="group flex items-center gap-[0.3rem] px-[0.6rem] py-[0.55rem]">
-          <div className="relative min-w-0 flex-1" ref={switcherRef}>
-            <button
-              type="button"
-              className="flex w-full cursor-pointer items-center gap-1 rounded-md py-[0.1rem] text-left text-[0.92rem] font-medium leading-none text-nav-muted hover:text-nav-active"
-              aria-haspopup="menu"
-              aria-expanded={switcherOpen}
-              onClick={() => setSwitcherOpen((o) => !o)}
-            >
-              {/* Nudged up 1px: the glyph's optical center sits a hair below the
-                  icons' geometric center, so left as-is the text reads low. */}
-              <span className="-translate-y-px truncate">
-                {active ? instanceLabel(active) : 'Connect a vault'}
-              </span>
-              {/* Up/down chevrons — the "switcher / selector" affordance, kept
-                  visually distinct from the folder rows' single expand chevron. */}
-              <svg
-                className="size-[0.85em] shrink-0"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="m7 15 5 5 5-5" />
-                <path d="m7 9 5-5 5 5" />
-              </svg>
-            </button>
-            {switcherOpen && (
-              <Menu align="left">
-                {instances.map((instance) => (
-                  <MenuItem
-                    key={instance.id}
-                    icon={instance.provider.icon}
-                    trailing={instance.id === active?.id ? CheckIcon : undefined}
-                    onClick={() => void selectInstance(instance)}
-                  >
-                    {instanceLabel(instance)}
-                  </MenuItem>
-                ))}
-                {instances.length > 0 && <MenuDivider />}
-                {vaultProviders.map((p) => (
-                  <MenuItem key={p.id} icon={PlusIcon} onClick={() => startNewInstance(p.id)}>
-                    {p.addLabel ?? `Add ${p.name}`}
-                  </MenuItem>
-                ))}
-              </Menu>
-            )}
-          </div>
-          <button
-            type="button"
-            className="invisible inline-flex shrink-0 cursor-pointer items-center justify-center rounded p-[0.15rem] text-muted opacity-70 hover:bg-line hover:text-text hover:opacity-100 group-hover:visible [&_svg]:block [&_svg]:size-[0.85em]"
-            title="New file"
-            onClick={() => startCreate('')}
-          >
-            {PlusIcon}
-          </button>
-          <button
-            type="button"
-            className="invisible inline-flex shrink-0 cursor-pointer items-center justify-center rounded p-[0.15rem] text-muted opacity-70 hover:bg-line hover:text-text hover:opacity-100 group-hover:visible [&_svg]:block [&_svg]:size-[0.85em]"
-            title="Configure vault"
-            onClick={openConfigureForActive}
-          >
-            {GearIcon}
-          </button>
-        </div>
+    <>
+      {/* Drawer scrim. Only below the width where the panel starts covering the
+          sheet — above it the sidebar sits in the gutter and dimming the page
+          would be nonsense. Sits under the panel but over the sheet, and below
+          the top bar's z-40 so the toggle button stays reachable. */}
+      {visible && (
+        <div
+          className="fixed inset-0 z-20 hidden bg-black/30 max-[1340px]:block"
+          onClick={onClose}
+          aria-hidden="true"
+        />
       )}
+      {/* Floats beside the sheet's left edge rather than hugging the viewport —
+          its position is derived from the same --sheet-max / --page-pad vars the
+          sheet and top bar use, so it tracks the sheet as the window resizes.
+          Below ~14rem of clearance (narrow windows) it clamps to --page-pad from
+          the viewport edge instead of overlapping the sheet.
 
-      {view === 'configure' ? (
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {configTarget.provider.ConnectForm ? (
-            <configTarget.provider.ConnectForm
-              key={configTarget.id}
-              ctx={vaultCtxFor(configTarget.id)}
-              onComplete={completeConnect}
-              configuring={isConfiguringActive && connected}
-              onCancel={configureCancel}
-              cancelLabel={connected ? 'Cancel' : 'Back'}
-            />
-          ) : (
-            <ConfigureForm
-              key={configTarget.id}
-              target={configTarget}
-              onCancel={configureCancel}
-              cancelLabel={connected ? 'Cancel' : 'Back'}
-              onConnected={handleConnected}
-            />
-          )}
-          {isConfiguringActive && connected && (
-            <div className="mt-[0.5rem] border-t border-line px-[0.7rem] pb-[0.7rem] pt-[0.9rem]">
+          Background: bg-backdrop matches the canvas, so on wide screens the tree
+          reads as bare text floating in the gutter — but it's opaque, so once the
+          window narrows enough to overlap the sheet, it occludes the text behind
+          it instead of bleeding through. At that point (~1340px) it also takes a
+          border + shadow so it reads as a deliberate docked panel, not a stray
+          box — and, being a drawer by then, a scrim and a self-closing habit. */}
+      <div className={`fixed top-[calc(4rem+env(safe-area-inset-top))] bottom-[calc(1rem+env(safe-area-inset-bottom))] z-30 w-52 flex-col bg-backdrop left-[max(var(--page-pad),env(safe-area-inset-left),calc(50%-var(--sheet-max)/2-13.5rem))] max-[1340px]:border max-[1340px]:border-line max-[1340px]:bg-surface max-[1340px]:shadow max-[700px]:w-[min(19rem,78vw)] ${visible ? 'flex' : 'hidden'}`}>
+        {/* Only while browsing: mid-connect (logging in, or adding a repo) there's
+            no vault to switch away from, and the connect form supplies its own
+            "GitHub" heading — so the switcher would be inert and redundant. */}
+        {view === 'browse' && (
+          <div className="group flex items-center gap-[0.3rem] px-[0.6rem] py-[0.55rem]">
+            <div className="relative min-w-0 flex-1" ref={switcherRef}>
               <button
                 type="button"
-                className="w-full cursor-pointer rounded-md border border-[#e5484d]/40 bg-transparent px-[0.7rem] py-[0.35rem] text-[0.8rem] text-[#e5484d] hover:bg-[#e5484d]/10"
-                onClick={() => void disconnect()}
+                className="flex w-full cursor-pointer items-center gap-1 rounded-md py-[0.1rem] text-left text-[0.92rem] font-medium leading-none text-nav-muted hover:text-nav-active"
+                aria-haspopup="menu"
+                aria-expanded={switcherOpen}
+                onClick={() => setSwitcherOpen((o) => !o)}
               >
-                Disconnect vault
-              </button>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div
-          className={`min-h-0 flex-1 overflow-y-auto p-[0.4rem] ${dragOver === '' ? 'bg-accent/10 ring-1 ring-inset ring-accent/50' : ''}`}
-          onDragOver={(e) => {
-            // Empty area (and non-folder rows) = drop into the tree root. Folder
-            // rows stop propagation, so this only fires when not over a folder.
-            if (!drag.canDrop('')) return
-            e.preventDefault()
-            drag.onOver('')
-          }}
-          onDrop={(e) => {
-            e.preventDefault()
-            drag.onDrop('')
-          }}
-        >
-          {opMsg && (
-            <div className="mb-[0.3rem] flex items-center gap-[0.4rem] px-[0.4rem] py-[0.3rem] text-[0.78rem] text-muted">
-              {opMsg.done ? (
-                <span className="inline-flex text-[#3fb950] [&_svg]:block [&_svg]:size-[0.9em]">
-                  {CheckIcon}
+                {/* Nudged up 1px: the glyph's optical center sits a hair below the
+                    icons' geometric center, so left as-is the text reads low. */}
+                <span className="-translate-y-px truncate">
+                  {active ? instanceLabel(active) : 'Connect a vault'}
                 </span>
-              ) : (
+                {/* Up/down chevrons — the "switcher / selector" affordance, kept
+                    visually distinct from the folder rows' single expand chevron. */}
                 <svg
-                  className="size-[0.85em] shrink-0 animate-spin opacity-70"
+                  className="size-[0.85em] shrink-0"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="3"
+                  strokeWidth="2.5"
                   strokeLinecap="round"
+                  strokeLinejoin="round"
                   aria-hidden="true"
                 >
-                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                  <path d="m7 15 5 5 5-5" />
+                  <path d="m7 9 5-5 5 5" />
                 </svg>
+              </button>
+              {switcherOpen && (
+                <Menu align="left">
+                  {instances.map((instance) => (
+                    <MenuItem
+                      key={instance.id}
+                      icon={instance.provider.icon}
+                      trailing={instance.id === active?.id ? CheckIcon : undefined}
+                      onClick={() => void selectInstance(instance)}
+                    >
+                      {instanceLabel(instance)}
+                    </MenuItem>
+                  ))}
+                  {instances.length > 0 && <MenuDivider />}
+                  {vaultProviders.map((p) => (
+                    <MenuItem key={p.id} icon={PlusIcon} onClick={() => startNewInstance(p.id)}>
+                      {p.addLabel ?? `Add ${p.name}`}
+                    </MenuItem>
+                  ))}
+                </Menu>
               )}
-              <span className="truncate">{opMsg.text}</span>
             </div>
-          )}
-          {createParent === '' && (
-            <NewFileInput
-              value={newPath}
-              placeholder="notes/todo.md"
-              onChange={setNewPath}
-              onSubmit={() => void submitCreate()}
-              onCancel={cancelCreate}
-            />
-          )}
-          {entries === null ? (
-            loadError ? (
-              <div className="flex flex-col gap-[0.4rem] px-[0.4rem] py-[0.3rem] text-[0.8rem]">
-                <p className="m-0 text-[#e5484d]">{loadError}</p>
+            <button
+              type="button"
+              className={headerActionCls}
+              title="New file"
+              onClick={() => startCreate('')}
+            >
+              {PlusIcon}
+            </button>
+            <button
+              type="button"
+              className={headerActionCls}
+              title="Configure vault"
+              onClick={openConfigureForActive}
+            >
+              {GearIcon}
+            </button>
+          </div>
+        )}
+
+        {view === 'configure' ? (
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {configTarget.provider.ConnectForm ? (
+              <configTarget.provider.ConnectForm
+                key={configTarget.id}
+                ctx={vaultCtxFor(configTarget.id)}
+                onComplete={completeConnect}
+                configuring={isConfiguringActive && connected}
+                onCancel={configureCancel}
+                cancelLabel={connected ? 'Cancel' : 'Back'}
+              />
+            ) : (
+              <ConfigureForm
+                key={configTarget.id}
+                target={configTarget}
+                onCancel={configureCancel}
+                cancelLabel={connected ? 'Cancel' : 'Back'}
+                onConnected={handleConnected}
+              />
+            )}
+            {isConfiguringActive && connected && (
+              <div className="mt-[0.5rem] border-t border-line px-[0.7rem] pb-[0.7rem] pt-[0.9rem]">
                 <button
                   type="button"
-                  className="w-fit cursor-pointer rounded-md border border-line bg-transparent px-[0.6rem] py-[0.25rem] text-muted hover:text-text"
-                  onClick={() => {
-                    setLoadError(null)
-                    refresh()
-                  }}
+                  className="w-full cursor-pointer rounded-md border border-[#e5484d]/40 bg-transparent px-[0.7rem] py-[0.35rem] text-[0.8rem] text-[#e5484d] hover:bg-[#e5484d]/10"
+                  onClick={() => void disconnect()}
                 >
-                  Retry
+                  Disconnect vault
                 </button>
               </div>
-            ) : (
-              <p className="px-[0.4rem] py-[0.3rem] text-[0.8rem] text-muted">Loading…</p>
-            )
-          ) : tree.length === 0 ? (
-            <p className="px-[0.4rem] py-[0.3rem] text-[0.8rem] text-muted">No files yet.</p>
-          ) : (
-            tree.map((node) => (
-              <Row
-                key={node.path}
-                node={node}
-                depth={0}
-                currentPath={currentPath}
-                create={create}
-                rename={rename}
-                drag={drag}
-                onOpen={onOpen}
-                onDelete={handleDelete}
+            )}
+          </div>
+        ) : (
+          <div
+            className={`min-h-0 flex-1 overflow-y-auto p-[0.4rem] ${dragOver === '' ? 'bg-accent/10 ring-1 ring-inset ring-accent/50' : ''}`}
+            onDragOver={(e) => {
+              // Empty area (and non-folder rows) = drop into the tree root. Folder
+              // rows stop propagation, so this only fires when not over a folder.
+              if (!drag.canDrop('')) return
+              e.preventDefault()
+              drag.onOver('')
+            }}
+            onDrop={(e) => {
+              e.preventDefault()
+              drag.onDrop('')
+            }}
+          >
+            {opMsg && (
+              <div className="mb-[0.3rem] flex items-center gap-[0.4rem] px-[0.4rem] py-[0.3rem] text-[0.78rem] text-muted">
+                {opMsg.done ? (
+                  <span className="inline-flex text-[#3fb950] [&_svg]:block [&_svg]:size-[0.9em]">
+                    {CheckIcon}
+                  </span>
+                ) : (
+                  <svg
+                    className="size-[0.85em] shrink-0 animate-spin opacity-70"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                  </svg>
+                )}
+                <span className="truncate">{opMsg.text}</span>
+              </div>
+            )}
+            {createParent === '' && (
+              <NewFileInput
+                value={newPath}
+                placeholder="notes/todo.md"
+                onChange={setNewPath}
+                onSubmit={() => void submitCreate()}
+                onCancel={cancelCreate}
               />
-            ))
-          )}
-        </div>
+            )}
+            {entries === null ? (
+              loadError ? (
+                <div className="flex flex-col gap-[0.4rem] px-[0.4rem] py-[0.3rem] text-[0.8rem]">
+                  <p className="m-0 text-[#e5484d]">{loadError}</p>
+                  <button
+                    type="button"
+                    className="w-fit cursor-pointer rounded-md border border-line bg-transparent px-[0.6rem] py-[0.25rem] text-muted hover:text-text"
+                    onClick={() => {
+                      setLoadError(null)
+                      refresh()
+                    }}
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : (
+                <p className="px-[0.4rem] py-[0.3rem] text-[0.8rem] text-muted">Loading…</p>
+              )
+            ) : tree.length === 0 ? (
+              <p className="px-[0.4rem] py-[0.3rem] text-[0.8rem] text-muted">No files yet.</p>
+            ) : (
+              tree.map((node) => (
+                <Row
+                  key={node.path}
+                  node={node}
+                  depth={0}
+                  currentPath={currentPath}
+                  create={create}
+                  rename={rename}
+                  drag={drag}
+                  onOpen={onOpen}
+                  onDelete={handleDelete}
+                  onMove={setMoveTarget}
+                />
+              ))
+            )}
+          </div>
+        )}
+      </div>
+      {moveTarget && (
+        <MoveDialog
+          node={moveTarget}
+          folders={folderPaths(tree).filter((path) => canMoveInto(moveTarget, path))}
+          onMove={(folderPath) => {
+            const target = moveTarget
+            setMoveTarget(null)
+            const dest = folderPath ? `${folderPath}/${target.name}` : target.name
+            void moveNode(target, dest, `Moving ${target.name}…`, `Moved ${target.name}`)
+          }}
+          onCancel={() => setMoveTarget(null)}
+        />
       )}
-    </div>
+    </>
   )
 }

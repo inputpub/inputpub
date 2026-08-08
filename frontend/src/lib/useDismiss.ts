@@ -9,14 +9,16 @@ export function useDismiss(
 ) {
   useEffect(() => {
     if (!active) return
-    const onDown = (e: MouseEvent) => {
+    const onDown = (e: PointerEvent) => {
       if (!ref.current?.contains(e.target as Node)) onDismiss()
     }
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onDismiss()
-    document.addEventListener('mousedown', onDown)
+    // pointerdown, not mousedown: iOS only synthesizes mouse events for targets
+    // it considers clickable, so tapping empty page area left menus stuck open.
+    document.addEventListener('pointerdown', onDown)
     document.addEventListener('keydown', onKey)
     return () => {
-      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('pointerdown', onDown)
       document.removeEventListener('keydown', onKey)
     }
   }, [ref, onDismiss, active])

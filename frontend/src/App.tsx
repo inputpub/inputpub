@@ -51,7 +51,8 @@ import { AiProviderDialog } from './components/dialogs/AiProviderDialog'
 import { AiPromptsDialog } from './components/dialogs/AiPromptsDialog'
 import { PromptDialog } from './components/dialogs/PromptDialog'
 import { SettingsDialog } from './components/dialogs/SettingsDialog'
-import { VaultSidebar } from './components/VaultSidebar'
+import { VaultSidebar, SIDEBAR_DRAWER_QUERY } from './components/VaultSidebar'
+import { useMediaQuery } from './lib/useMediaQuery'
 import { FilePreview } from './components/FilePreview'
 import { isTextPath } from './vault'
 import type { VaultSaveState } from './lib/vault'
@@ -99,6 +100,10 @@ function App() {
   // drops the loaded file tree and forces a fresh API fetch on every reopen.
   // Stays false until the first open, so a user who never opens it pays no fetch.
   const [vaultSidebarMounted, setVaultSidebarMounted] = useState(vaultSidebarOpen)
+  // Narrow enough that the sidebar overlays the sheet rather than sitting in the
+  // gutter beside it — at which point it behaves as a drawer (scrim, closes on
+  // an outside tap, closes once a file is opened) instead of as a fixed panel.
+  const sidebarIsDrawer = useMediaQuery(SIDEBAR_DRAWER_QUERY)
   // Latch the two together here rather than in an effect watching `open` —
   // that would set state during render-commit and cascade an extra render.
   const showVaultSidebar = useCallback((open: boolean) => {
@@ -248,6 +253,11 @@ function App() {
   // Switch the shown path and clear the old content up front (with a spinner),
   // so a slow GitHub read doesn't leave the previous file lingering.
   async function openVaultPath(path: string) {
+    // As a drawer, the sidebar covers the very thing that was just opened — so
+    // step out of the way. Deliberately not persisted: the stored preference is
+    // the user's own last toggle, and the drawer getting out of its own way
+    // shouldn't overwrite it (they'd find it closed on the desktop next time).
+    if (sidebarIsDrawer) setVaultSidebarOpen(false)
     // Only text is editable; everything else is previewed (or reported as
     // un-previewable). Show it *over* the open note rather than in place of it:
     // the note stays open in lib/vault, so a staged edit still flushes and
@@ -436,6 +446,12 @@ function App() {
       {vaultSidebarMounted && (
         <VaultSidebar
           visible={vaultSidebarOpen}
+          // Dismissing the drawer by tapping outside it is a deliberate choice,
+          // unlike the automatic close in openVaultPath — so it's remembered.
+          onClose={() => {
+            showVaultSidebar(false)
+            persistVaultSidebarOpen(false)
+          }}
           currentPath={previewPath ?? vaultPath}
           onOpen={(path) => void openVaultPath(path)}
           onCreated={onVaultFileCreated}
@@ -450,11 +466,11 @@ function App() {
           the centered sheet (same max-width + horizontal padding as the sheet
           area). Empty area lets clicks pass through; the two groups re-enable
           pointer events. */}
-      <div className="pointer-events-none absolute inset-x-0 top-4 z-40 mx-auto flex max-w-[calc(var(--sheet-max)+2*var(--page-pad))] items-start justify-between px-[var(--page-pad)]">
+      <div className="pointer-events-none absolute inset-x-0 top-[calc(1rem+env(safe-area-inset-top))] z-40 mx-auto flex max-w-[calc(var(--sheet-max)+2*var(--page-pad))] items-start justify-between px-[var(--page-pad)]">
         <div className="pointer-events-auto relative">
           <button
             type="button"
-            className={`inline-flex cursor-pointer items-center justify-center rounded-md border border-transparent px-2 py-[0.3rem] text-nav-muted opacity-60 transition duration-150 hover:bg-hover hover:text-nav-active hover:opacity-100 ${vaultSidebarOpen ? 'bg-hover text-nav-active opacity-100' : ''}`}
+            className={`inline-flex cursor-pointer items-center justify-center rounded-md border border-transparent px-2 py-[0.3rem] text-nav-muted opacity-60 transition duration-150 pointer-coarse:px-[0.6rem] pointer-coarse:py-[0.55rem] hover:bg-hover hover:text-nav-active hover:opacity-100 ${vaultSidebarOpen ? 'bg-hover text-nav-active opacity-100' : ''}`}
             aria-pressed={vaultSidebarOpen}
             aria-label="Toggle vault"
             title="Vault"
@@ -474,7 +490,7 @@ function App() {
           <div className="relative" ref={toolsRef}>
             <button
               type="button"
-              className="inline-flex cursor-pointer items-center justify-center rounded-md border border-transparent px-2 py-[0.3rem] text-nav-muted opacity-60 transition duration-150 hover:bg-hover hover:text-nav-active hover:opacity-100"
+              className="inline-flex cursor-pointer items-center justify-center rounded-md border border-transparent px-2 py-[0.3rem] text-nav-muted opacity-60 transition duration-150 pointer-coarse:px-[0.6rem] pointer-coarse:py-[0.55rem] hover:bg-hover hover:text-nav-active hover:opacity-100"
               aria-haspopup="menu"
               aria-expanded={toolsOpen}
               aria-label="More"
@@ -581,8 +597,8 @@ function App() {
 
       {/* A4-ish sheet: runs flush to the bottom of the window (no bottom gap,
           squared bottom corners), then grows with content. */}
-      <main className="flex min-h-dvh justify-center bg-backdrop px-[var(--page-pad)] pt-16">
-        <div className="flex h-max min-h-[calc(100dvh-4rem)] w-full max-w-[var(--sheet-max)] flex-col border-[0.5px] shadow-md border-edge bg-paper px-[85px] py-12  max-[700px]:px-5 max-[700px]:pb-8 max-[700px]:pt-7">
+      <main className="flex min-h-dvh justify-center bg-backdrop pt-[calc(4rem+env(safe-area-inset-top))] pl-[max(var(--page-pad),env(safe-area-inset-left))] pr-[max(var(--page-pad),env(safe-area-inset-right))]">
+        <div className="flex h-max min-h-[calc(100dvh-4rem-env(safe-area-inset-top))] w-full max-w-[var(--sheet-max)] flex-col border-[0.5px] shadow-md border-edge bg-paper px-[85px] py-12  max-[700px]:px-5 max-[700px]:pb-8 max-[700px]:pt-7">
           {(previewPath ?? vaultPath) && (
             <div className="mb-3 flex items-center gap-2 text-[0.78rem] text-nav-muted">
               <span className="truncate">{previewPath ?? vaultPath}</span>
