@@ -151,6 +151,116 @@ body,
   }
 }
 
+/* The vault panel is only put in the DOM the first time it's opened (App keeps
+   it there afterwards so its file tree survives a close — see
+   vaultSidebarMounted), which means that first open inserts it already in its
+   open state, with nothing to animate from. @starting-style supplies the
+   "before" for that one insertion; every open and close after it is an ordinary
+   class change the transition on the element already covers. Without this, the
+   drawer slides every time except the first, which is the one time you notice.
+
+   `translate`, not `transform`: that's the property Tailwind v4 writes for
+   translate-x utilities, and it's what the element transitions.
+
+   Scoped to the drawer width to match the element, which only slides there. A
+   translate of -100% moves the panel by its own width, which clears the screen
+   only while it's flush against the left edge; in the wide layout it starts a
+   couple of hundred pixels in, so the same slide left most of it on screen and
+   the visibility flip at the end read as the panel vanishing mid-air. Above the
+   breakpoint it isn't a drawer at all — it just appears and disappears. */
+@media (width < 1280px) and (prefers-reduced-motion: no-preference) {
+  @starting-style {
+    .vault-panel {
+      translate: -100%;
+    }
+
+    .vault-scrim {
+      opacity: 0;
+    }
+  }
+}
+
+/* ── The vault drawer ──────────────────────────────────────────────────────
+   Below the breakpoint the panel is a drawer that pushes the page aside, and a
+   drag from the screen edge can leave it anywhere between shut and open. Three
+   things have to move as one — the panel, the page, and the scrim over it — so
+   all three derive from a single number, --drawer-progress, 0 shut to 1 open.
+
+   The toggle button sets it through [data-drawer]; a finger sets it frame by
+   frame as an inline style, which outranks the attribute for as long as the
+   drag lasts (see lib/useDrawerSwipe). That's the whole trick: one value, two
+   ways to write it, and nothing has to know which one is driving.
+
+   None of it applies above the breakpoint, where the panel isn't a drawer at
+   all but a fixed panel in the margin that Tailwind's visible/invisible
+   toggles. --drawer-width is outside the query because it's the panel's width
+   at every size, drawer or not. */
+.drawer-shell {
+  --drawer-width: 13rem;
+}
+
+@media (width < 700px) {
+  .drawer-shell {
+    --drawer-width: min(19rem, calc(100vw - 3.5rem));
+  }
+}
+
+@media (width < 1280px) {
+  html {
+    /* The page slides right as the drawer arrives; without this, what leaves
+       the right edge becomes horizontal scroll. `clip`, not `hidden`, so the
+       vertical axis isn't turned into a scroll container along with it. */
+    overflow-x: clip;
+  }
+
+  /* Only the value before React's first effect gets to it. From then on the
+     progress is always written inline — by the effect on open/closed, and by
+     the gesture frame by frame — because an inline value outranks a selector
+     permanently: had the two shared the job, a drag that settled back where it
+     started would pin a value here that the button could never override. */
+  .drawer-shell {
+    --drawer-progress: 0;
+  }
+
+  .vault-panel {
+    translate: calc((var(--drawer-progress) - 1) * 100%);
+    visibility: hidden;
+  }
+
+  .drawer-shell[data-drawer='open'] .vault-panel,
+  .drawer-shell[data-drawer-dragging] .vault-panel {
+    visibility: visible;
+  }
+
+  .drawer-shift {
+    translate: calc(var(--drawer-progress) * var(--drawer-width));
+  }
+
+  .vault-scrim {
+    opacity: calc(var(--drawer-progress) * 0.32);
+    pointer-events: none;
+  }
+
+  .drawer-shell[data-drawer='open'] .vault-scrim {
+    pointer-events: auto;
+  }
+
+  /* Only once the finger is off. While dragging, these are rewritten every
+     frame and a transition would trail the touch instead of tracking it. */
+  .drawer-shell:not([data-drawer-dragging]) :is(.vault-panel, .drawer-shift, .vault-scrim) {
+    transition:
+      translate 200ms ease-out,
+      opacity 200ms ease-out,
+      visibility 200ms;
+  }
+}
+
+@media (width < 1280px) and (prefers-reduced-motion: reduce) {
+  .drawer-shell :is(.vault-panel, .drawer-shift, .vault-scrim) {
+    transition: none;
+  }
+}
+
 /* Row actions in the vault tree (rename, delete, new file) appear on hover.
    Touch devices have no hover to reveal them with, so there they stay visible —
    otherwise those actions are unreachable on a phone. Two variants because the

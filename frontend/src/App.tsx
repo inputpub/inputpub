@@ -53,6 +53,7 @@ import { PromptDialog } from './components/dialogs/PromptDialog'
 import { SettingsDialog } from './components/dialogs/SettingsDialog'
 import { VaultSidebar, SIDEBAR_DRAWER_QUERY } from './components/VaultSidebar'
 import { useMediaQuery } from './lib/useMediaQuery'
+import { useDrawerSwipe } from './lib/useDrawerSwipe'
 import { FilePreview } from './components/FilePreview'
 import { isTextPath } from './vault'
 import type { VaultSaveState } from './lib/vault'
@@ -104,6 +105,8 @@ function App() {
   // gutter beside it — at which point it behaves as a drawer (scrim, closes on
   // an outside tap, closes once a file is opened) instead of as a fixed panel.
   const sidebarIsDrawer = useMediaQuery(SIDEBAR_DRAWER_QUERY)
+  const shellRef = useRef<HTMLDivElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
   // Latch the two together here rather than in an effect watching `open` —
   // that would set state during render-commit and cascade an extra render.
   const showVaultSidebar = useCallback((open: boolean) => {
@@ -131,6 +134,45 @@ function App() {
     setToolsView('main')
   }, [])
   useDismiss(toolsRef, closeTools, toolsOpen)
+
+  // Swipe the drawer open from the screen edge, and shut from anywhere. Written
+  // straight to the DOM rather than through state: this fires every frame of the
+  // drag, and re-rendering the editor at that rate is not something to attempt.
+  const onDrawerProgress = useCallback((progress: number | null, dragging: boolean) => {
+    const shell = shellRef.current
+    if (!shell) return
+    if (progress === null) shell.style.removeProperty('--drawer-progress')
+    else shell.style.setProperty('--drawer-progress', String(progress))
+    shell.toggleAttribute('data-drawer-dragging', dragging)
+  }, [])
+  const onDrawerSettle = useCallback(
+    (open: boolean) => {
+      showVaultSidebar(open)
+      persistVaultSidebarOpen(open)
+    },
+    [showVaultSidebar],
+  )
+  // Mount on the first touch that could become a swipe, not on the swipe: the
+  // panel has to be in the DOM to be measured, and a user whose last session
+  // left it closed would otherwise have nothing to pull. Mounting doesn't open
+  // it, so the only cost of a touch that turns out to be a scroll is the tree
+  // fetch — which that user was one tap away from paying anyway.
+  const onDrawerReach = useCallback(() => setVaultSidebarMounted(true), [])
+  useDrawerSwipe({
+    enabled: sidebarIsDrawer,
+    open: vaultSidebarOpen,
+    panelRef,
+    onReach: onDrawerReach,
+    onProgress: onDrawerProgress,
+    onSettle: onDrawerSettle,
+  })
+  // The other writer of --drawer-progress: the button, the scrim, opening a
+  // file. The gesture has already written the same value by the time this runs
+  // after a swipe, so it lands as a no-op there and drives the whole animation
+  // everywhere else.
+  useEffect(() => {
+    shellRef.current?.style.setProperty('--drawer-progress', vaultSidebarOpen ? '1' : '0')
+  }, [vaultSidebarOpen])
 
   // Swap the editor to new content (remount with a fresh seed) and record
   // which vault file it belongs to (undefined = the local draft).
@@ -450,9 +492,16 @@ function App() {
     // width + horizontal gutter; the sheet, the fixed top bar, and the floating
     // vault sidebar all derive their position from these, so everything lines
     // up with the sheet's edges at any width.
-    <div className="relative min-h-dvh [--page-pad:1rem] [--sheet-max:820px] max-[700px]:[--page-pad:0.75rem]">
+    <div
+      ref={shellRef}
+      // drawer-shell owns --drawer-progress, which index.css turns into the
+      // drawer's offset, the page's shift and the scrim's opacity at once.
+      className="drawer-shell relative min-h-dvh [--page-pad:1rem] [--sheet-max:820px] max-[700px]:[--page-pad:0.75rem]"
+      data-drawer={vaultSidebarOpen ? 'open' : 'shut'}
+    >
       {vaultSidebarMounted && (
         <VaultSidebar
+          panelRef={panelRef}
           visible={vaultSidebarOpen}
           // Dismissing the drawer by tapping outside it is a deliberate choice,
           // unlike the automatic close in openVaultPath — so it's remembered.
@@ -469,6 +518,10 @@ function App() {
           onError={(text) => setStatus({ kind: 'error', text })}
         />
       )}
+      {/* Everything the drawer pushes aside. The toast and the dialogs are
+          deliberately outside it: they're fixed and centred on the viewport, and
+          a translated ancestor would drag them along and re-anchor them. */}
+      <div className="drawer-shift">
       {/* Top bar: scrolls with the page (absolute, not fixed) so the buttons
           never cover the text once you scroll down. Its inner edges align with
           the centered sheet (same max-width + horizontal padding as the sheet
@@ -693,6 +746,7 @@ function App() {
           )}
         </div>
       </main>
+      </div>
 
       {status && <Toast status={status} />}
 

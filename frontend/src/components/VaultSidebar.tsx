@@ -1,4 +1,4 @@
-import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type DragEvent, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { vaultProviders, vaultNs, type VaultEntry, type VaultProvider } from '../vault'
 import { getConfig, setConfig } from '../lib/storage'
 import {
@@ -78,13 +78,22 @@ function buildTree(entries: VaultEntry[]): TreeNode[] {
   return root.children
 }
 
-/** Below this width the sidebar overlays the sheet instead of sitting in the
- *  gutter beside it, and so behaves as a drawer. Kept in step by hand with the
- *  `max-[1340px]` classes on the container below — App reads it to decide the
- *  matching behaviour (see sidebarIsDrawer). Written as a range query because
- *  that's exactly what Tailwind's `max-*` compiles to (`width < 1340px`);
- *  `max-width: 1340px` would include 1340 and disagree at that one pixel. */
-export const SIDEBAR_DRAWER_QUERY = '(width < 1340px)'
+/** Below this width the sidebar can no longer sit in the gutter beside the
+ *  sheet, so it becomes a drawer over it. Kept in step by hand with the
+ *  `max-[1280px]` classes on the container below — App reads it to decide the
+ *  matching behaviour (see sidebarIsDrawer).
+ *
+ *  Where the number comes from: the panel is 13rem wide and clamps to
+ *  --page-pad (1rem) from the left edge, so its right edge sits at 224px; the
+ *  sheet's left edge is at 50% - --sheet-max/2. They collide below 1268px, and
+ *  the 8px gap the two keep at wider widths closes at 1284px. 1280 splits that,
+ *  and is a common laptop width — which is the point, since anything above it
+ *  keeps the roomier layout.
+ *
+ *  Written as a range query because that's exactly what Tailwind's `max-*`
+ *  compiles to (`width < 1280px`); `max-width: 1280px` would include 1280 and
+ *  disagree with the CSS at that one pixel. */
+export const SIDEBAR_DRAWER_QUERY = '(width < 1280px)'
 
 // Rows get roomier on touch: at the pointer-fine height they're ~28px, well
 // under the ~44px a fingertip needs, which made picking a file out of a dense
@@ -628,6 +637,7 @@ function defaultConfigTarget(): VaultInstance {
 export function VaultSidebar({
   visible,
   onClose,
+  panelRef,
   currentPath,
   onOpen,
   onCreated,
@@ -640,6 +650,9 @@ export function VaultSidebar({
    *  display:none'd) so its loaded file tree survives a close/reopen without
    *  re-fetching — see App's vaultSidebarMounted. */
   visible: boolean
+  /** The panel element itself, so the swipe gesture can measure the distance
+   *  a drag has to cover (see lib/useDrawerSwipe). */
+  panelRef: RefObject<HTMLDivElement | null>
   /** Dismissed from within — currently the drawer scrim (see SIDEBAR_DRAWER_QUERY). */
   onClose: () => void
   currentPath: string | undefined
@@ -1010,30 +1023,57 @@ export function VaultSidebar({
     <>
       {/* Drawer scrim. Only below the width where the panel starts covering the
           sheet — above it the sidebar sits in the gutter and dimming the page
-          would be nonsense. Sits under the panel but over the sheet, and below
-          the top bar's z-40 so the toggle button stays reachable. */}
-      {visible && (
-        <div
-          className="fixed inset-0 z-20 hidden bg-black/30 max-[1340px]:block"
-          onClick={onClose}
-          aria-hidden="true"
-        />
-      )}
+          would be nonsense. Its opacity comes from --drawer-progress along with
+          everything else, so a half-open drag is half-dimmed.
+
+          It covers the top bar too. That reads as wrong until you remember the
+          page is being pushed aside, not covered: the toggle button travels
+          right with the rest of it and dims with it, and a tap that lands on it
+          hits the scrim and closes the drawer — which is what the button would
+          have done anyway. */}
+      <div
+        className={`vault-scrim fixed inset-0 z-20 hidden bg-black/30 transition-opacity duration-200 ease-out max-[1280px]:block motion-reduce:transition-none ${
+          visible ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+        onClick={onClose}
+        aria-hidden="true"
+      />
       {/* Two different things at two widths.
 
           Wide: it floats in the gutter beside the sheet, positioned from the same
           --sheet-max / --page-pad vars the sheet and top bar use so it tracks the
-          sheet as the window resizes. bg-backdrop matches the canvas, so the tree
-          reads as bare text in the margin — no border, no shadow, no corners.
+          sheet as the window resizes. The tree reads as bare text in the margin —
+          no background, no border, no shadow, no corners. No background in
+          particular: at these widths it never overlaps the sheet (the two are
+          anchored to the same point, 13.5rem vs its own 13rem, so the gap is a
+          constant 8px), while the sheet's shadow blurs ~12px past its edge. An
+          opaque panel there had nothing to hide and did nothing but slice that
+          soft gradient off with a hard vertical edge.
 
-          Narrow (~1340px down): it's a drawer, so it behaves like one. Anchored
+          Narrow (~1280px down): it's a drawer, so it behaves like one. Anchored
           flush to the left edge and running the full height, with a border on
           the only edge that actually faces the page — the right one. No corners:
           a drawer is a slab that slid in from off-screen, and rounding it is
-          what made it read as a floating card instead. The top padding (not a
-          top offset) keeps the content clear of the top bar while the surface
-          itself still reaches the screen edge; the bottom padding does the same
-          for the home indicator.
+          what made it read as a floating card instead. Padding rather than a
+          top offset, so the surface still reaches the screen edge while its
+          contents clear the notch; the bottom padding does the same for the
+          home indicator.
+
+          The top padding is 1rem, the top bar's own, not the 4rem the wide
+          layout uses: a drawer that pushes the page can't be overlapped by it
+          (the drawer's right edge lands at progress×width and the button 12px
+          past that, so they stay 12px apart the whole way in), which left that
+          4rem buying nothing and reading as a dead band above the switcher.
+          It's 4rem in the wide layout for a different reason — there the panel
+          shares the sheet's top edge, and reading as a column beside the paper
+          is worth more than lining up with a button it isn't grouped with.
+
+          bg-backdrop, not bg-surface: the drawer runs the full height, so its
+          top 4rem sits directly beside the strip the top bar lives on, which is
+          the page's own backdrop. A lighter surface there drew a seam right
+          across the header. It only needs to be opaque — at this width it does
+          cover the sheet — not to be a distinct shade; the border and the scrim
+          are what separate it from the page.
 
           border-edge, not border-line: this edge sits over a dimmed page, which
           is exactly what --edge is for (see index.css) — --line is for dividers
@@ -1044,7 +1084,7 @@ export function VaultSidebar({
           straddled a device pixel and rendered as a soft two-pixel smear. This
           form is always a whole number of pixels, and the 56px it leaves also
           guarantees a strip of the dimmed page stays visible behind it. */}
-      <div className={`fixed top-[calc(4rem+env(safe-area-inset-top))] bottom-[calc(1rem+env(safe-area-inset-bottom))] z-30 w-52 flex-col bg-backdrop left-[max(var(--page-pad),env(safe-area-inset-left),calc(50%-var(--sheet-max)/2-13.5rem))] max-[1340px]:top-0 max-[1340px]:bottom-0 max-[1340px]:left-0 max-[1340px]:border-r max-[1340px]:border-edge max-[1340px]:bg-surface max-[1340px]:shadow-overlay max-[1340px]:pt-[calc(4rem+env(safe-area-inset-top))] max-[1340px]:pb-[env(safe-area-inset-bottom)] max-[1340px]:pl-[env(safe-area-inset-left)] max-[700px]:w-[min(19rem,calc(100vw-3.5rem))] ${visible ? 'flex' : 'hidden'}`}>
+      <div ref={panelRef} className={`vault-panel flex fixed top-[calc(4rem+env(safe-area-inset-top))] bottom-[calc(1rem+env(safe-area-inset-bottom))] z-30 w-[var(--drawer-width)] flex-col left-[max(var(--page-pad),env(safe-area-inset-left),calc(50%-var(--sheet-max)/2-13.5rem))] max-[1280px]:top-0 max-[1280px]:bottom-0 max-[1280px]:left-0 max-[1280px]:border-r max-[1280px]:border-edge max-[1280px]:bg-backdrop max-[1280px]:shadow-overlay max-[1280px]:pt-[calc(1rem+env(safe-area-inset-top))] max-[1280px]:pb-[env(safe-area-inset-bottom)] max-[1280px]:pl-[env(safe-area-inset-left)] translate-x-0 ${visible ? 'visible' : 'invisible'}`}>
         {/* Only while browsing: mid-connect (logging in, or adding a repo) there's
             no vault to switch away from, and the connect form supplies its own
             "GitHub" heading — so the switcher would be inert and redundant. */}
