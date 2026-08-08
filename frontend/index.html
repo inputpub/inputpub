@@ -19,7 +19,15 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Input Pub" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <!-- black-translucent is the only value that hands the status-bar strip to
+         the page. Under "default" iOS draws it itself and insets the web view,
+         so the strip never followed the theme (it stayed light in dark mode)
+         and picked up whatever the system happened to sample from the page —
+         including the drawer's scrim, which then stuck until a reload. With
+         this the page paints it like any other pixels; the safe-area insets
+         added throughout keep content out from under it. Its text colour comes
+         from theme-color, which lib/theme.ts keeps on the real theme. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Input Pub</title>
     <meta
       name="description"
