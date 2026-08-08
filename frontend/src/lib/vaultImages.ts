@@ -77,12 +77,17 @@ function resolveFrom(fromDir: string, link: string): string {
 // another vault's bytes. Values are promises, which also dedupes the case of
 // one image appearing several times in a document.
 const cache = new Map<string, Promise<string>>()
+// The same URLs once they've actually arrived. resolveVaultImage has to answer
+// synchronously to avoid a broken image (see its comment), and a settled
+// promise can't be read synchronously — so the value is kept here too.
+const settled = new Map<string, string>()
 const objectUrls = new Set<string>()
 
 const keyFor = (instanceId: string, path: string) => `${instanceId}:${path}`
 
-function track(url: string): string {
+function track(key: string, url: string): string {
   objectUrls.add(url)
+  settled.set(key, url)
   return url
 }
 
@@ -92,6 +97,7 @@ export function releaseVaultImages(): void {
   for (const url of objectUrls) URL.revokeObjectURL(url)
   objectUrls.clear()
   cache.clear()
+  settled.clear()
 }
 
 // Uploads happen inside the editor, where the file tree can't see them, so it
@@ -125,7 +131,8 @@ export async function uploadVaultImage(file: File): Promise<string> {
   // Show it from the bytes we already hold rather than reading it back: right
   // after a commit GitHub can still serve the pre-write tree, so a re-read here
   // is both slower and liable to 404.
-  cache.set(keyFor(active.id, path), Promise.resolve(track(URL.createObjectURL(file))))
+  const key = keyFor(active.id, path)
+  cache.set(key, Promise.resolve(track(key, URL.createObjectURL(file))))
   for (const fn of uploadListeners) fn(path)
   return relativeFrom(dirOf(notePath), path)
 }
@@ -141,7 +148,7 @@ export function vaultFileObjectUrl(path: string): Promise<string> {
   if (hit) return hit
   const pending = active.provider
     .readBinary(vaultCtxFor(active.id), path)
-    .then((blob) => track(URL.createObjectURL(blob)))
+    .then((blob) => track(key, URL.createObjectURL(blob)))
     .catch((err) => {
       cache.delete(key)
       throw err
@@ -213,12 +220,19 @@ export function resolveVaultImage(src: string): string | Promise<string> {
   if (!path) return src
 
   const key = keyFor(active.id, path)
+  // Already downloaded: hand back the URL itself, not a promise. Crepe assigns
+  // a string straight to the <img>, but for a promise it leaves the original
+  // src in place until it resolves — and that src is a repo-relative path,
+  // which the browser dutifully requests from this origin, 404s, and draws as a
+  // broken image. Anything already in hand must therefore answer synchronously.
+  const done = settled.get(key)
+  if (done) return done
   const hit = cache.get(key)
   if (hit) return hit
 
   const pending = active.provider
     .readBinary(vaultCtxFor(active.id), path)
-    .then((blob) => track(URL.createObjectURL(blob)))
+    .then((blob) => track(key, URL.createObjectURL(blob)))
     .catch(() => {
       // Leave a missing image broken rather than cached as broken — the file
       // may simply not have been committed yet.
@@ -227,4 +241,34 @@ export function resolveVaultImage(src: string): string | Promise<string> {
     })
   cache.set(key, pending)
   return pending
+}
+
+/** Every image a note links to, as the raw link text found in the source. The
+ *  `<...>` branch is Markdown's escape for paths containing spaces — the form
+ *  Obsidian writes — which the bare branch would cut at the first space.
+ *
+ *  Only ever used to decide what to prefetch, so a miss costs a read that gets
+ *  discarded and an image that resolves the slow way, never a wrong render. */
+function imageLinks(markdown: string): string[] {
+  const links = new Set<string>()
+  for (const m of markdown.matchAll(/!\[[^\]]*\]\(\s*(?:<([^>]*)>|([^)\s]+))/g)) {
+    links.add(m[1] ?? m[2])
+  }
+  for (const m of markdown.matchAll(/<img\b[^>]*?\ssrc="([^"]*)"/gi)) links.add(m[1])
+  return [...links]
+}
+
+/** Download a note's images before it's handed to the editor, so they're in
+ *  hand when it mounts and resolveVaultImage can answer synchronously — which
+ *  is what keeps them from rendering broken first.
+ *
+ *  Gives up after `timeoutMs` and lets the note through regardless: a slow or
+ *  image-heavy note shouldn't hold its own text hostage, and an image that
+ *  arrives late just resolves the way it always did. A link that isn't a vault
+ *  image costs nothing here — resolveVaultImage hands those straight back. */
+export async function warmVaultImages(markdown: string, timeoutMs = 2000): Promise<void> {
+  const links = imageLinks(markdown)
+  if (!links.length) return
+  const all = Promise.allSettled(links.map((src) => resolveVaultImage(src)))
+  await Promise.race([all, new Promise((resolve) => setTimeout(resolve, timeoutMs))])
 }

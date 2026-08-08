@@ -56,6 +56,59 @@
   --crepe-color-inline-area: #2b2b2b;
 }
 
+/* Corner radii ------------------------------------------------------------ */
+
+/* Crepe has its own implicit scale — 4px for small controls, 8px for panels and
+   their inner buttons, 12px for the big floating containers — which lands just
+   off the app's item/control/surface steps (see index.css). Since the editor is
+   most of what's on screen, that near-miss is what makes the UI look unsettled.
+   Remap it onto the same three tokens, by the same rule: dense/inline things get
+   `item`, things you type into get `control`, floating containers get `surface`.
+
+   Deliberately left alone: everything Crepe draws as a circle or a pill (the
+   submit button, the streaming spinner, the AI action buttons, the blockquote
+   rule's cap, the table cell handles) and the 2px inline diff marks — those are
+   shapes, not corners, and rounding them to 6px would just make them look wrong. */
+.milkdown .ProseMirror code,
+.milkdown .ai-instruction-item-shortcut,
+.milkdown .milkdown-ai-diff-actions-shortcut,
+.milkdown .milkdown-block-handle .operation-item,
+.milkdown .milkdown-code-block .cm-panel input,
+.milkdown .milkdown-code-block .cm-panel > button,
+.milkdown .milkdown-code-block .search-box,
+.milkdown .milkdown-code-block .tools .language-button,
+.milkdown .milkdown-code-block .tools .tools-button-group button,
+.milkdown .milkdown-diff-added-block,
+.milkdown .milkdown-diff-removed-block,
+.milkdown .milkdown-image-inline .empty-image-inline .confirm,
+.milkdown .milkdown-latex-inline-edit .container button,
+.milkdown .milkdown-link-edit > .link-edit > .button,
+.milkdown .milkdown-link-preview > .link-preview > .button,
+.milkdown .milkdown-link-preview > .link-preview > .link-icon,
+.milkdown .milkdown-slash-menu ul li,
+.milkdown .milkdown-toolbar .toolbar-item,
+.milkdown .milkdown-top-bar .top-bar-heading-button,
+.milkdown .milkdown-top-bar .top-bar-heading-option,
+.milkdown .milkdown-top-bar .top-bar-item {
+  border-radius: var(--radius-item);
+}
+
+.milkdown .ProseMirror pre,
+.milkdown .milkdown-image-inline .empty-image-inline {
+  border-radius: var(--radius-control);
+}
+
+.milkdown .milkdown-ai-instruction > .ai-instruction,
+.milkdown .milkdown-code-block .list-wrapper,
+.milkdown .milkdown-latex-inline-edit,
+.milkdown .milkdown-link-edit > .link-edit,
+.milkdown .milkdown-link-preview > .link-preview,
+.milkdown .milkdown-slash-menu,
+.milkdown .milkdown-toolbar,
+.milkdown .milkdown-top-bar .top-bar-heading-dropdown {
+  border-radius: var(--radius-surface);
+}
+
 /* Headings share the body typeface (only size/weight differ). */
 .milkdown .ProseMirror :is(h1, h2, h3, h4, h5, h6) {
   font-family: var(--sans);

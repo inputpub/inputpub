@@ -11,11 +11,11 @@ interface RepoOption {
 }
 
 const fieldCls =
-  'w-full rounded-lg border border-line bg-bg px-[0.6rem] py-2 text-[0.86rem] text-inherit focus:border-accent focus:outline-none'
+  'w-full rounded-control border border-line bg-bg px-2.5 py-2 text-[0.86rem] text-inherit focus:border-accent focus:outline-none'
 const primaryBtn =
-  'cursor-pointer rounded-md border border-btn-bg bg-btn-bg px-[0.7rem] py-[0.4rem] text-[0.82rem] text-btn-fg disabled:cursor-default disabled:opacity-60'
+  'cursor-pointer rounded-control border border-btn-bg bg-btn-bg px-3 py-1.5 text-[0.82rem] text-btn-fg disabled:cursor-default disabled:opacity-60'
 const ghostBtn =
-  'cursor-pointer rounded-md border border-line bg-transparent px-[0.7rem] py-[0.4rem] text-[0.82rem] text-inherit disabled:cursor-default disabled:opacity-60'
+  'cursor-pointer rounded-control border border-line bg-transparent px-3 py-1.5 text-[0.82rem] text-inherit disabled:cursor-default disabled:opacity-60'
 const linkBtn =
   'cursor-pointer bg-transparent p-0 text-[0.78rem] text-muted underline decoration-line underline-offset-2 hover:text-text hover:decoration-current disabled:cursor-default disabled:opacity-50'
 
@@ -161,7 +161,7 @@ export function GithubConnect({
   // Titled per mode: "GitHub" alone said which service, never which task —
   // and login/pick-a-repo are two steps of one task, so they share a title.
   const headerFor = (title: string) => (
-    <div className="flex items-center gap-[0.5rem] text-[0.86rem] font-medium">
+    <div className="flex items-center gap-2 text-[0.86rem] font-medium">
       <span className="inline-flex text-[1.1rem] leading-none [&_svg]:block [&_svg]:size-[1em]">
         {GitHubIcon}
       </span>
@@ -176,7 +176,7 @@ export function GithubConnect({
   if (configuring) {
     const repoName = (ctx.getConfig('repo') ?? '').trim()
     return (
-      <div className="flex flex-col gap-[0.7rem] p-[0.7rem]">
+      <div className="flex flex-col gap-3 p-3">
         {headerFor('Repo settings')}
         {repoName && (
           <p className="m-0 truncate text-[0.78rem] text-muted">
@@ -214,7 +214,7 @@ export function GithubConnect({
           Each save is a commit, so edits are batched into one commit per pause rather than one per
           keystroke.
         </p>
-        {error && <p className="m-0 text-[0.78rem] text-[#e5484d]">{error}</p>}
+        {error && <p className="m-0 text-[0.78rem] text-danger">{error}</p>}
         <div className="flex justify-end gap-2">
           {onCancel && (
             <button type="button" className={ghostBtn} onClick={onCancel}>
@@ -232,7 +232,7 @@ export function GithubConnect({
   // No token yet → log in.
   if (!token) {
     return (
-      <div className="flex flex-col gap-[0.7rem] p-[0.7rem]">
+      <div className="flex flex-col gap-3 p-3">
         {connectRepoHeader}
         {oauth ? (
           <>
@@ -249,7 +249,7 @@ export function GithubConnect({
             GitHub login isn’t configured for this site.
           </p>
         )}
-        {error && <p className="m-0 text-[0.78rem] text-[#e5484d]">{error}</p>}
+        {error && <p className="m-0 text-[0.78rem] text-danger">{error}</p>}
         {onCancel && (
           <div className="flex justify-end gap-2">
             <button type="button" className={ghostBtn} onClick={onCancel}>
@@ -264,7 +264,7 @@ export function GithubConnect({
   // Have a token → pick a repository from the ones it can currently access.
   const empty = repos !== null && repos.length === 0
   return (
-    <div className="flex flex-col gap-[0.7rem] p-[0.7rem]">
+    <div className="flex flex-col gap-3 p-3">
       {connectRepoHeader}
       {/* No "Repository" label — the select's own placeholder already says it.
           pr-7 keeps long repo names clear of the native dropdown arrow. */}
@@ -290,7 +290,7 @@ export function GithubConnect({
         <button
           type="button"
           title="Refresh repositories"
-          className="shrink-0 cursor-pointer rounded-md bg-transparent p-2 text-muted hover:bg-hover hover:text-text disabled:cursor-default disabled:opacity-50 [&_svg]:block [&_svg]:size-[1em]"
+          className="shrink-0 cursor-pointer rounded-item bg-transparent p-2 text-muted hover:bg-hover hover:text-text disabled:cursor-default disabled:opacity-50 [&_svg]:block [&_svg]:size-[1em]"
           disabled={repos === null}
           onClick={() => {
             setRepos(null)
@@ -336,7 +336,7 @@ export function GithubConnect({
       </div>
       {/* Above the actions, not after them — an error explaining why Connect
           failed belongs where you look before pressing it again. */}
-      {error && <p className="m-0 text-[0.78rem] text-[#e5484d]">{error}</p>}
+      {error && <p className="m-0 text-[0.78rem] text-danger">{error}</p>}
       <div className="mt-[0.4rem] flex justify-end gap-2">
         {onCancel && (
           <button type="button" className={ghostBtn} onClick={onCancel}>

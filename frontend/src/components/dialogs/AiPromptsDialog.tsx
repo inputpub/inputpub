@@ -4,7 +4,7 @@ import { Button, Modal, ModalActions, ModalNote, ModalTitle } from '../Modal'
 import { SparklesIcon } from '../../destinations/icons'
 
 const rowInputCls =
-  'w-full rounded-md border border-line bg-bg px-2 py-1.5 text-[0.82rem] text-inherit focus:border-accent focus:outline-none'
+  'w-full rounded-control border border-line bg-bg px-2 py-1.5 text-[0.82rem] text-inherit focus:border-accent focus:outline-none'
 
 const newId = () =>
   typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `p-${Date.now()}`
@@ -53,7 +53,7 @@ export function AiPromptsDialog({
         the prompt is the instruction sent to the model. Saved only in this browser.
       </ModalNote>
 
-      <div className="-mx-[1.2rem] flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-[1.2rem]">
+      <div className="-mx-[1.2rem] flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5">
         {prompts.map((p) => (
           <div key={p.id} className="flex items-start gap-2">
             <div className="flex flex-1 flex-col gap-1">
@@ -74,7 +74,7 @@ export function AiPromptsDialog({
             <button
               type="button"
               aria-label="Remove prompt"
-              className="mt-0.5 shrink-0 cursor-pointer rounded-md border-none bg-transparent px-2 py-1 text-[1.1rem] leading-none text-muted hover:bg-hover hover:text-text"
+              className="mt-0.5 shrink-0 cursor-pointer rounded-item border-none bg-transparent px-2 py-1 text-[1.1rem] leading-none text-muted hover:bg-hover hover:text-text"
               onClick={() => removePrompt(p.id)}
             >
               ×
@@ -90,7 +90,7 @@ export function AiPromptsDialog({
 
       <button
         type="button"
-        className="cursor-pointer rounded-md border border-dashed border-line bg-transparent py-2 text-[0.82rem] text-muted hover:border-accent hover:text-text"
+        className="cursor-pointer rounded-control border border-dashed border-line bg-transparent py-2 text-[0.82rem] text-muted hover:border-accent hover:text-text"
         onClick={addPrompt}
       >
         + Add prompt

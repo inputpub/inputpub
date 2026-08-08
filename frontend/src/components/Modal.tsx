@@ -11,12 +11,12 @@ import { useEffect, type ButtonHTMLAttributes, type ReactNode } from 'react'
 const overlayCls =
   'fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]'
 const dialogCls =
-  'flex max-h-[85dvh] w-full max-w-[420px] flex-col gap-[0.8rem] rounded-xl border border-line bg-surface p-[1.2rem]'
+  'flex max-h-[85dvh] w-full max-w-[420px] flex-col gap-3 rounded-surface border border-line bg-surface p-5 shadow-overlay'
 const titleCls = 'm-0 text-[1.05rem]'
 const noteCls = 'm-0 text-[0.78rem] text-muted'
 const actionsCls = 'flex justify-end gap-2'
 const btnBaseCls =
-  'cursor-pointer rounded-md px-[0.9rem] py-[0.45rem] disabled:cursor-default disabled:opacity-50'
+  'cursor-pointer rounded-control px-3.5 py-2 disabled:cursor-default disabled:opacity-50'
 const btnVariantCls = {
   primary: 'border border-btn-bg bg-btn-bg text-btn-fg',
   ghost: 'border border-line bg-transparent text-inherit',

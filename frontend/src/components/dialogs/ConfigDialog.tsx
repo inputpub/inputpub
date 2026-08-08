@@ -37,7 +37,7 @@ export function ConfigDialog({
       <ModalNote>Saved only in this browser (localStorage); never uploaded.</ModalNote>
       {/* Scrollable field area so tall configs (e.g. GitHub, with a template
           textarea) don't push the action buttons out of the modal. */}
-      <div className="-mx-[1.2rem] flex min-h-0 flex-1 flex-col gap-[0.8rem] overflow-y-auto px-[1.2rem]">
+      <div className="-mx-[1.2rem] flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5">
         {(dest.config ?? []).map((f, i) => (
           <Field
             key={f.key}

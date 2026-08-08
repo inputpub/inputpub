@@ -8,9 +8,9 @@ import type { ReactNode } from 'react'
 // taller than a phone in landscape — without this its last items sit off-screen
 // with no way to reach them.
 const menuCls =
-  'absolute z-20 top-[calc(100%+0.5rem)] flex max-h-[min(70dvh,28rem)] min-w-[184px] flex-col gap-[0.15rem] overflow-y-auto overscroll-contain rounded-lg border border-line bg-surface p-[0.3rem] shadow-[0_4px_20px_rgba(0,0,0,0.12)]'
+  'absolute z-20 top-[calc(100%+0.5rem)] flex max-h-[min(70dvh,28rem)] min-w-[184px] flex-col gap-0.5 overflow-y-auto overscroll-contain rounded-surface border border-line bg-surface p-1 shadow-overlay'
 const itemCls =
-  'flex cursor-pointer items-center gap-[0.6rem] rounded-lg px-[0.7rem] py-[0.55rem] text-left hover:bg-hover'
+  'flex cursor-pointer items-center gap-2.5 rounded-item px-3 py-2 text-left hover:bg-hover'
 const itemIconCls =
   'inline-flex w-[1.4rem] items-center justify-center text-[1.1rem] leading-none [&_svg]:block [&_svg]:size-[1em]'
 
@@ -50,7 +50,7 @@ export function MenuItem({
     <>
       <span className={itemIconCls}>{icon}</span>
       <span className="whitespace-nowrap">{children}</span>
-      {trailing && <span className="ml-auto inline-flex pl-[0.6rem] opacity-45">{trailing}</span>}
+      {trailing && <span className="ml-auto inline-flex pl-2.5 opacity-45">{trailing}</span>}
     </>
   )
   if (href) {

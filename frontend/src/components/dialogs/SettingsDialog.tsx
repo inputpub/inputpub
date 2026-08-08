@@ -65,17 +65,17 @@ export function SettingsDialog({
       {/* The destination list scrolls; the title and Close/Save stay pinned.
           The negative margin lets the scrollbar reach the dialog edge while
           content keeps its padding. */}
-      <div className="-mx-[1.2rem] min-h-0 flex-1 overflow-y-auto px-[1.2rem]">
+      <div className="-mx-[1.2rem] min-h-0 flex-1 overflow-y-auto px-5">
         <div className="flex flex-col divide-y divide-line">
           {destinations.map((d) => {
             const hasConfig = fieldsByDest[d.id].length > 0
             return (
-              <div key={d.id} className="py-[0.55rem]">
-                <div className="flex items-center justify-between gap-[0.6rem] text-[0.9rem]">
+              <div key={d.id} className="py-2">
+                <div className="flex items-center justify-between gap-2.5 text-[0.9rem]">
                   {hasConfig ? (
                     <button
                       type="button"
-                      className="group inline-flex min-w-0 flex-1 cursor-pointer items-center gap-[0.55rem] text-left text-inherit"
+                      className="group inline-flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left text-inherit"
                       aria-expanded={!!open[d.id]}
                       onClick={() => toggleOpen(d.id)}
                     >
@@ -95,7 +95,7 @@ export function SettingsDialog({
                       </svg>
                     </button>
                   ) : (
-                    <span className="inline-flex min-w-0 flex-1 cursor-default items-center gap-[0.55rem] text-left">
+                    <span className="inline-flex min-w-0 flex-1 cursor-default items-center gap-2 text-left">
                       <span className={iconCls}>{d.icon}</span>
                       <span>{d.name}</span>
                     </span>
@@ -109,7 +109,7 @@ export function SettingsDialog({
                 </div>
                 {hasConfig && open[d.id] && (
                   // Indent matches the toggle icon (1.2rem) + gap (0.55rem).
-                  <div className="flex flex-col gap-[0.7rem] pb-[0.3rem] pl-[1.75rem] pt-[0.7rem]">
+                  <div className="flex flex-col gap-3 pb-1 pl-7 pt-3">
                     {fieldsByDest[d.id].map((f) => (
                       <Field
                         key={f.key}

@@ -21,11 +21,49 @@
   --color-line: var(--line);
   --color-edge: var(--edge);
   --color-accent: var(--accent);
+  --color-danger: var(--danger);
   --color-btn-bg: var(--btn-bg);
   --color-btn-fg: var(--btn-fg);
 
   --font-sans: var(--sans);
   --font-mono: var(--mono);
+}
+
+/* Corner radii named for the role an element plays, not for a size — picking
+   `rounded-md` by eye is how the app ended up with six different radii and no
+   rule connecting them. The three steps are meant to nest: a container's radius
+   less its padding lands near the step below, so curves stay concentric (a menu
+   at 12 with 4px of padding wants ~8 inside it, hence item at 6).
+
+     item     dense rows and inline chips — tree rows, menu items, icon buttons
+     control  things you operate directly — buttons, inputs, textareas
+     surface  floating containers — menus, dialogs, and the sheet's top edge
+
+   Not part of the scale: the toast, which is a deliberate pill. Kept in a plain
+   @theme (not the `inline` block above) so the variables also land in :root for
+   the hand-written CSS in Pro.css / Template.css to use. */
+@theme {
+  --radius-item: 6px;
+  --radius-control: 8px;
+  --radius-surface: 12px;
+}
+
+/* Elevation, named for how far off the page a thing sits. There were six
+   bespoke shadows before this for what is really three levels, disagreeing on
+   both blur (16/20/24/32) and opacity (.04 → .3) — and the dialog, the highest
+   surface of all, had none at all.
+
+     raised   the sheet and the static cards: barely off the page
+     overlay  menus, the vault drawer, dialogs: floating over the sheet
+     popover  the toast, which floats over everything including dialogs
+
+   All three are black, so they carry almost nothing in dark mode against a
+   #000 backdrop — there, the borders do the separating. That's the reason to
+   keep the set small rather than tune shadows nobody sees half the time. */
+@theme {
+  --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
+  --shadow-overlay: 0 4px 20px rgba(0, 0, 0, 0.12);
+  --shadow-popover: 0 8px 32px rgba(0, 0, 0, 0.24);
 }
 
 /* Vercel-style black & white palette. Each token is declared once, as
@@ -51,6 +89,12 @@
      the way Minshot keeps its editor window readable over any wallpaper. */
   --edge: light-dark(rgba(0, 0, 0, 0.12), rgba(255, 255, 255, 0.14));
   --accent: light-dark(#000000, #ffffff);
+  /* Errors and destructive actions — the one hue in an otherwise black-and-white
+     palette, so it only ever appears where something went wrong or is about to.
+     The dark value matches the red the editor already uses for its own errors
+     (--crepe-color-error in editor-theme.css); #e5484d on a #000 backdrop is
+     too dim to read comfortably at the small sizes these messages use. */
+  --danger: light-dark(#e5484d, #ff6666);
   /* Primary button — soft charcoal rather than pure black */
   --btn-bg: light-dark(#333333, #e5e5e5);
   --btn-fg: light-dark(#ffffff, #111111);

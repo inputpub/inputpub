@@ -50,7 +50,7 @@ export function FilePreview({ path }: { path: string }) {
   }
 
   if (error) {
-    return <p className="m-0 text-[0.85rem] text-[#e5484d]">{error}</p>
+    return <p className="m-0 text-[0.85rem] text-danger">{error}</p>
   }
   if (!url) {
     return (

@@ -90,7 +90,7 @@ export const SIDEBAR_DRAWER_QUERY = '(width < 1340px)'
 // under the ~44px a fingertip needs, which made picking a file out of a dense
 // tree a coin toss.
 const rowCls =
-  'group flex w-full cursor-pointer items-center gap-[0.4rem] rounded-md px-[0.4rem] py-[0.3rem] text-left text-[0.84rem] pointer-coarse:py-[0.5rem] hover:text-nav-active'
+  'group flex w-full cursor-pointer items-center gap-1.5 rounded-item px-1.5 py-1 text-left text-[0.84rem] pointer-coarse:py-2 hover:text-nav-active'
 const iconCls =
   'inline-flex w-[1.1rem] shrink-0 items-center justify-center text-[0.95rem] [&_svg]:block [&_svg]:size-[1em]'
 // The small action buttons on rows and in the header. How they're revealed is
@@ -99,7 +99,7 @@ const iconCls =
 // way to reveal them — keeps them on screen. The move button is the inverse: it
 // exists only for touch, since dragging covers it everywhere else.
 const actionCls =
-  'shrink-0 rounded p-[0.15rem] text-muted opacity-70 pointer-coarse:p-[0.4rem] hover:bg-line hover:text-text hover:opacity-100 [&_svg]:block [&_svg]:size-[0.85em]'
+  'shrink-0 rounded-item p-0.5 text-muted opacity-70 pointer-coarse:p-1.5 hover:bg-line hover:text-text hover:opacity-100 [&_svg]:block [&_svg]:size-[0.85em]'
 const rowActionCls = `row-action ${actionCls}`
 const headerActionCls = `header-action inline-flex cursor-pointer items-center justify-center ${actionCls}`
 const moveActionCls = `hidden pointer-coarse:inline-flex ${actionCls}`
@@ -197,7 +197,7 @@ function RenameInput({
   return (
     <input
       autoFocus
-      className="min-w-0 flex-1 rounded border border-accent bg-bg px-[0.25rem] py-0 text-[0.84rem] text-inherit focus:outline-none"
+      className="min-w-0 flex-1 rounded-item border border-accent bg-bg px-1 py-0 text-[0.84rem] text-inherit focus:outline-none"
       value={value}
       onFocus={(e) => e.target.select()}
       onClick={(e) => e.stopPropagation()}
@@ -232,7 +232,7 @@ function NewFileInput({
   return (
     <input
       autoFocus
-      className="mb-[0.3rem] w-full rounded-md border border-line bg-bg px-[0.5rem] py-[0.3rem] text-[0.82rem] text-inherit focus:border-accent focus:outline-none"
+      className="mb-[0.3rem] w-full rounded-control border border-line bg-bg px-2 py-1 text-[0.82rem] text-inherit focus:border-accent focus:outline-none"
       placeholder={placeholder}
       value={value}
       onChange={(e) => onChange(e.target.value)}
@@ -531,8 +531,8 @@ function ConfigureForm({
   const description = provider.describe?.(vaultCtxFor(id))
 
   return (
-    <div className="flex flex-col gap-[0.7rem] p-[0.7rem]">
-      <div className="flex items-center gap-[0.5rem] text-[0.86rem] font-medium">
+    <div className="flex flex-col gap-3 p-3">
+      <div className="flex items-center gap-2 text-[0.86rem] font-medium">
         <span className={iconCls}>{provider.icon}</span>
         <span>{provider.name}</span>
       </div>
@@ -546,12 +546,12 @@ function ConfigureForm({
         />
       ))}
       {description && <p className="m-0 text-[0.78rem] text-muted">{description}</p>}
-      {error && <p className="m-0 text-[0.78rem] text-[#e5484d]">{error}</p>}
+      {error && <p className="m-0 text-[0.78rem] text-danger">{error}</p>}
       <div className="flex justify-end gap-2">
         {onCancel && (
           <button
             type="button"
-            className="cursor-pointer rounded-md border border-line bg-transparent px-[0.7rem] py-[0.35rem] text-[0.82rem] text-inherit"
+            className="cursor-pointer rounded-control border border-line bg-transparent px-3 py-1.5 text-[0.82rem] text-inherit"
             onClick={onCancel}
           >
             {cancelLabel}
@@ -559,7 +559,7 @@ function ConfigureForm({
         )}
         <button
           type="button"
-          className="cursor-pointer rounded-md border border-btn-bg bg-btn-bg px-[0.7rem] py-[0.35rem] text-[0.82rem] text-btn-fg disabled:cursor-default disabled:opacity-60"
+          className="cursor-pointer rounded-control border border-btn-bg bg-btn-bg px-3 py-1.5 text-[0.82rem] text-btn-fg disabled:cursor-default disabled:opacity-60"
           disabled={busy}
           onClick={() => void connect()}
         >
@@ -591,12 +591,12 @@ function MoveDialog({
       ) : (
         <>
           <ModalNote>Pick the folder to move it into.</ModalNote>
-          <div className="-mx-1 flex min-h-0 flex-col gap-[0.1rem] overflow-y-auto px-1">
+          <div className="-mx-1 flex min-h-0 flex-col gap-0.5 overflow-y-auto px-1">
             {folders.map((path) => (
               <button
                 key={path}
                 type="button"
-                className="cursor-pointer truncate rounded-md px-[0.6rem] py-[0.5rem] text-left text-[0.85rem] text-nav-muted hover:bg-hover hover:text-nav-active"
+                className="cursor-pointer truncate rounded-item px-2.5 py-2 text-left text-[0.85rem] text-nav-muted hover:bg-hover hover:text-nav-active"
                 onClick={() => onMove(path)}
               >
                 {path === '' ? 'Top level' : path}
@@ -1019,28 +1019,41 @@ export function VaultSidebar({
           aria-hidden="true"
         />
       )}
-      {/* Floats beside the sheet's left edge rather than hugging the viewport —
-          its position is derived from the same --sheet-max / --page-pad vars the
-          sheet and top bar use, so it tracks the sheet as the window resizes.
-          Below ~14rem of clearance (narrow windows) it clamps to --page-pad from
-          the viewport edge instead of overlapping the sheet.
+      {/* Two different things at two widths.
 
-          Background: bg-backdrop matches the canvas, so on wide screens the tree
-          reads as bare text floating in the gutter — but it's opaque, so once the
-          window narrows enough to overlap the sheet, it occludes the text behind
-          it instead of bleeding through. At that point (~1340px) it also takes a
-          border + shadow so it reads as a deliberate docked panel, not a stray
-          box — and, being a drawer by then, a scrim and a self-closing habit. */}
-      <div className={`fixed top-[calc(4rem+env(safe-area-inset-top))] bottom-[calc(1rem+env(safe-area-inset-bottom))] z-30 w-52 flex-col bg-backdrop left-[max(var(--page-pad),env(safe-area-inset-left),calc(50%-var(--sheet-max)/2-13.5rem))] max-[1340px]:border max-[1340px]:border-line max-[1340px]:bg-surface max-[1340px]:shadow max-[700px]:w-[min(19rem,78vw)] ${visible ? 'flex' : 'hidden'}`}>
+          Wide: it floats in the gutter beside the sheet, positioned from the same
+          --sheet-max / --page-pad vars the sheet and top bar use so it tracks the
+          sheet as the window resizes. bg-backdrop matches the canvas, so the tree
+          reads as bare text in the margin — no border, no shadow, no corners.
+
+          Narrow (~1340px down): it's a drawer, so it behaves like one. Anchored
+          flush to the left edge and running the full height, with a border on
+          the only edge that actually faces the page — the right one. No corners:
+          a drawer is a slab that slid in from off-screen, and rounding it is
+          what made it read as a floating card instead. The top padding (not a
+          top offset) keeps the content clear of the top bar while the surface
+          itself still reaches the screen edge; the bottom padding does the same
+          for the home indicator.
+
+          border-edge, not border-line: this edge sits over a dimmed page, which
+          is exactly what --edge is for (see index.css) — --line is for dividers
+          drawn on a known background and goes mushy against the scrim.
+
+          The phone width is `100vw - 3.5rem` rather than a percentage for the
+          same reason: 78vw of a 393px screen is 306.54px, so the right border
+          straddled a device pixel and rendered as a soft two-pixel smear. This
+          form is always a whole number of pixels, and the 56px it leaves also
+          guarantees a strip of the dimmed page stays visible behind it. */}
+      <div className={`fixed top-[calc(4rem+env(safe-area-inset-top))] bottom-[calc(1rem+env(safe-area-inset-bottom))] z-30 w-52 flex-col bg-backdrop left-[max(var(--page-pad),env(safe-area-inset-left),calc(50%-var(--sheet-max)/2-13.5rem))] max-[1340px]:top-0 max-[1340px]:bottom-0 max-[1340px]:left-0 max-[1340px]:border-r max-[1340px]:border-edge max-[1340px]:bg-surface max-[1340px]:shadow-overlay max-[1340px]:pt-[calc(4rem+env(safe-area-inset-top))] max-[1340px]:pb-[env(safe-area-inset-bottom)] max-[1340px]:pl-[env(safe-area-inset-left)] max-[700px]:w-[min(19rem,calc(100vw-3.5rem))] ${visible ? 'flex' : 'hidden'}`}>
         {/* Only while browsing: mid-connect (logging in, or adding a repo) there's
             no vault to switch away from, and the connect form supplies its own
             "GitHub" heading — so the switcher would be inert and redundant. */}
         {view === 'browse' && (
-          <div className="group flex items-center gap-[0.3rem] px-[0.6rem] py-[0.55rem]">
+          <div className="group flex items-center gap-1 px-2.5 py-2">
             <div className="relative min-w-0 flex-1" ref={switcherRef}>
               <button
                 type="button"
-                className="flex w-full cursor-pointer items-center gap-1 rounded-md py-[0.1rem] text-left text-[0.92rem] font-medium leading-none text-nav-muted hover:text-nav-active"
+                className="flex w-full cursor-pointer items-center gap-1 rounded-item py-0.5 text-left text-[0.92rem] font-medium leading-none text-nav-muted hover:text-nav-active"
                 aria-haspopup="menu"
                 aria-expanded={switcherOpen}
                 onClick={() => setSwitcherOpen((o) => !o)}
@@ -1127,10 +1140,10 @@ export function VaultSidebar({
               />
             )}
             {isConfiguringActive && connected && (
-              <div className="mt-[0.5rem] border-t border-line px-[0.7rem] pb-[0.7rem] pt-[0.9rem]">
+              <div className="mt-[0.5rem] border-t border-line px-3 pb-3 pt-3.5">
                 <button
                   type="button"
-                  className="w-full cursor-pointer rounded-md border border-[#e5484d]/40 bg-transparent px-[0.7rem] py-[0.35rem] text-[0.8rem] text-[#e5484d] hover:bg-[#e5484d]/10"
+                  className="w-full cursor-pointer rounded-control border border-danger/40 bg-transparent px-3 py-1.5 text-[0.8rem] text-danger hover:bg-danger/10"
                   onClick={() => void disconnect()}
                 >
                   Disconnect vault
@@ -1140,7 +1153,7 @@ export function VaultSidebar({
           </div>
         ) : (
           <div
-            className={`min-h-0 flex-1 overflow-y-auto p-[0.4rem] ${dragOver === '' ? 'bg-accent/10 ring-1 ring-inset ring-accent/50' : ''}`}
+            className={`min-h-0 flex-1 overflow-y-auto p-1.5 ${dragOver === '' ? 'bg-accent/10 ring-1 ring-inset ring-accent/50' : ''}`}
             onDragOver={(e) => {
               // Empty area (and non-folder rows) = drop into the tree root. Folder
               // rows stop propagation, so this only fires when not over a folder.
@@ -1154,7 +1167,7 @@ export function VaultSidebar({
             }}
           >
             {opMsg && (
-              <div className="mb-[0.3rem] flex items-center gap-[0.4rem] px-[0.4rem] py-[0.3rem] text-[0.78rem] text-muted">
+              <div className="mb-[0.3rem] flex items-center gap-1.5 px-1.5 py-1 text-[0.78rem] text-muted">
                 {opMsg.done ? (
                   <span className="inline-flex text-[#3fb950] [&_svg]:block [&_svg]:size-[0.9em]">
                     {CheckIcon}
@@ -1186,11 +1199,11 @@ export function VaultSidebar({
             )}
             {entries === null ? (
               loadError ? (
-                <div className="flex flex-col gap-[0.4rem] px-[0.4rem] py-[0.3rem] text-[0.8rem]">
-                  <p className="m-0 text-[#e5484d]">{loadError}</p>
+                <div className="flex flex-col gap-1.5 px-1.5 py-1 text-[0.8rem]">
+                  <p className="m-0 text-danger">{loadError}</p>
                   <button
                     type="button"
-                    className="w-fit cursor-pointer rounded-md border border-line bg-transparent px-[0.6rem] py-[0.25rem] text-muted hover:text-text"
+                    className="w-fit cursor-pointer rounded-control border border-line bg-transparent px-2.5 py-1 text-muted hover:text-text"
                     onClick={() => {
                       setLoadError(null)
                       refresh()
@@ -1200,10 +1213,10 @@ export function VaultSidebar({
                   </button>
                 </div>
               ) : (
-                <p className="px-[0.4rem] py-[0.3rem] text-[0.8rem] text-muted">Loading…</p>
+                <p className="px-1.5 py-1 text-[0.8rem] text-muted">Loading…</p>
               )
             ) : tree.length === 0 ? (
-              <p className="px-[0.4rem] py-[0.3rem] text-[0.8rem] text-muted">No files yet.</p>
+              <p className="px-1.5 py-1 text-[0.8rem] text-muted">No files yet.</p>
             ) : (
               tree.map((node) => (
                 <Row

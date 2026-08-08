@@ -43,7 +43,7 @@ import {
   resetVaultSaveState,
   stageVaultEdit,
 } from './lib/vault'
-import { inlineVaultImages, releaseVaultImages } from './lib/vaultImages'
+import { inlineVaultImages, releaseVaultImages, warmVaultImages } from './lib/vaultImages'
 import { Menu, MenuDivider, MenuItem } from './components/Menu'
 import { Toast, type ToastStatus } from './components/Toast'
 import { ConfigDialog } from './components/dialogs/ConfigDialog'
@@ -166,8 +166,11 @@ function App() {
   // Auto-open the sidebar alongside it only for users who've never toggled
   // it — once they have, their stored preference wins.
   useEffect(() => {
-    reopenLastVaultFile().then((opened) => {
+    reopenLastVaultFile().then(async (opened) => {
       if (!opened) return
+      // Same reason as in openVaultPath: have the images in hand before the
+      // editor mounts, or each renders broken first.
+      await warmVaultImages(opened.content)
       showDocument(opened.content, opened.path)
       if (getVaultSidebarOpen() === undefined) showVaultSidebar(true)
     })
@@ -272,6 +275,11 @@ function App() {
     setLoadingFile(true)
     try {
       const content = await openVaultFile(path)
+      // Pull the note's images down before mounting the editor, so it can paint
+      // them on the first frame instead of showing each one broken while its
+      // bytes are fetched. Folded into the spinner that's already up for the
+      // note read, and time-bounded, so it can only ever cost a moment.
+      await warmVaultImages(content)
       showDocument(content, path, true)
       resetVaultSaveState()
     } catch (err) {
@@ -470,7 +478,7 @@ function App() {
         <div className="pointer-events-auto relative">
           <button
             type="button"
-            className={`inline-flex cursor-pointer items-center justify-center rounded-md border border-transparent px-2 py-[0.3rem] text-nav-muted opacity-60 transition duration-150 pointer-coarse:px-[0.6rem] pointer-coarse:py-[0.55rem] hover:bg-hover hover:text-nav-active hover:opacity-100 ${vaultSidebarOpen ? 'bg-hover text-nav-active opacity-100' : ''}`}
+            className={`inline-flex cursor-pointer items-center justify-center rounded-control border border-transparent px-2 py-1 text-nav-muted opacity-60 transition duration-150 pointer-coarse:px-2.5 pointer-coarse:py-2 hover:bg-hover hover:text-nav-active hover:opacity-100 ${vaultSidebarOpen ? 'bg-hover text-nav-active opacity-100' : ''}`}
             aria-pressed={vaultSidebarOpen}
             aria-label="Toggle vault"
             title="Vault"
@@ -490,7 +498,7 @@ function App() {
           <div className="relative" ref={toolsRef}>
             <button
               type="button"
-              className="inline-flex cursor-pointer items-center justify-center rounded-md border border-transparent px-2 py-[0.3rem] text-nav-muted opacity-60 transition duration-150 pointer-coarse:px-[0.6rem] pointer-coarse:py-[0.55rem] hover:bg-hover hover:text-nav-active hover:opacity-100"
+              className="inline-flex cursor-pointer items-center justify-center rounded-control border border-transparent px-2 py-1 text-nav-muted opacity-60 transition duration-150 pointer-coarse:px-2.5 pointer-coarse:py-2 hover:bg-hover hover:text-nav-active hover:opacity-100"
               aria-haspopup="menu"
               aria-expanded={toolsOpen}
               aria-label="More"
@@ -596,16 +604,18 @@ function App() {
       </div>
 
       {/* A4-ish sheet: runs flush to the bottom of the window (no bottom gap,
-          squared bottom corners), then grows with content. */}
+          squared bottom corners), then grows with content. Only the top corners
+          are rounded — the bottom edge isn't an edge, it's where the page keeps
+          going, and curving it would draw a line that isn't there. */}
       <main className="flex min-h-dvh justify-center bg-backdrop pt-[calc(4rem+env(safe-area-inset-top))] pl-[max(var(--page-pad),env(safe-area-inset-left))] pr-[max(var(--page-pad),env(safe-area-inset-right))]">
-        <div className="flex h-max min-h-[calc(100dvh-4rem-env(safe-area-inset-top))] w-full max-w-[var(--sheet-max)] flex-col border-[0.5px] shadow-md border-edge bg-paper px-[85px] py-12  max-[700px]:px-5 max-[700px]:pb-8 max-[700px]:pt-7">
+        <div className="flex h-max min-h-[calc(100dvh-4rem-env(safe-area-inset-top))] w-full max-w-[var(--sheet-max)] flex-col rounded-t-surface border-[0.5px] shadow-raised border-edge bg-paper px-[85px] py-12  max-[700px]:px-5 max-[700px]:pb-8 max-[700px]:pt-7">
           {(previewPath ?? vaultPath) && (
             <div className="mb-3 flex items-center gap-2 text-[0.78rem] text-nav-muted">
               <span className="truncate">{previewPath ?? vaultPath}</span>
               {previewPath ? (
                 <button
                   type="button"
-                  className="-my-1 -mr-1 shrink-0 cursor-pointer rounded px-1 py-1 opacity-70 hover:text-nav-active hover:opacity-100"
+                  className="-my-1 -mr-1 shrink-0 cursor-pointer rounded-item px-1 py-1 opacity-70 hover:text-nav-active hover:opacity-100"
                   onClick={() => setPreviewPath(null)}
                 >
                   Close
@@ -628,13 +638,18 @@ function App() {
                    save-on-every-edit store is always already up to date. */
                 activeVaultBatchesWrites() &&
                 (vaultSaveState === 'dirty' ? (
+                  /* On a pointer this reads as a status line and offers the
+                     action on hover. Touch has no hover to offer it with, so
+                     "Unsaved changes" would just look like text — there it
+                     states the action outright, and takes a border and a real
+                     tap target to look like the button it has always been. */
                   <button
                     type="button"
-                    className="group -my-1 -mr-1 shrink-0 cursor-pointer rounded px-1 py-1 opacity-70 hover:text-nav-active hover:opacity-100"
+                    className="group -my-1 -mr-1 shrink-0 cursor-pointer rounded-item px-1 py-1 opacity-70 pointer-coarse:-my-2 pointer-coarse:border pointer-coarse:border-line pointer-coarse:px-2 pointer-coarse:py-1.5 pointer-coarse:opacity-100 hover:text-nav-active hover:opacity-100"
                     onClick={() => void flushPendingVaultSave()}
                   >
-                    <span className="group-hover:hidden">Unsaved changes</span>
-                    <span className="hidden group-hover:inline">Save now</span>
+                    <span className="pointer-coarse:hidden group-hover:hidden">Unsaved changes</span>
+                    <span className="hidden pointer-coarse:inline group-hover:inline">Save now</span>
                   </button>
                 ) : (
                   <span className="shrink-0 opacity-70">

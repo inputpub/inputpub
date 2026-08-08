@@ -30,8 +30,8 @@
   width: 100%;
   background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: 12px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
+  border-radius: var(--radius-surface);
+  box-shadow: var(--shadow-raised);
   padding: 2.5rem 2.25rem;
 }
 
@@ -81,7 +81,7 @@ code,
 .tpl-card code {
   background: var(--backdrop);
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--radius-item);
   padding: 0.1em 0.35em;
   font-size: 0.85em;
 }
@@ -89,7 +89,7 @@ code,
   margin: 0;
   background: var(--backdrop);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   padding: 0.75rem 0.9rem;
   font-size: 0.85rem;
   line-height: 1.5;
