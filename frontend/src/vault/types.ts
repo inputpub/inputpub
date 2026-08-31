@@ -16,6 +16,11 @@ export type { ConfigField }
 export interface VaultEntry {
   path: string
   type: 'file' | 'dir'
+  /** The provider's revision marker for this file, when listing is cheap
+   *  enough to include one (a GitHub tree hands out every blob's sha). Used to
+   *  spot which cached files a remote change actually invalidated — see
+   *  lib/vaultCache. Absent for directories, and for providers that can't say. */
+  sha?: string
 }
 
 export interface VaultFile {
@@ -124,6 +129,13 @@ export interface VaultProvider {
    *  repo "timqian/notes", or a folder's name) — falls back to the
    *  provider's own `name` when unset (e.g. before it's configured). */
   label?: (ctx: VaultContext) => string | undefined
+  /** A token that changes whenever *anything* in the vault changes (GitHub: the
+   *  branch head). One cheap request answers "is everything I cached still
+   *  current?", which is what lets a launch paint from cache and check
+   *  afterwards instead of re-reading the vault every time. Resolve to
+   *  undefined when it can't be determined — callers then re-read as they
+   *  always did. Leave unset for providers with no such marker. */
+  revision?: (ctx: VaultContext) => Promise<string | undefined>
   /** List every file in the vault (flat; directories are inferred from paths). */
   listTree: (ctx: VaultContext) => Promise<VaultEntry[]>
   readFile: (ctx: VaultContext, path: string) => Promise<VaultFile>

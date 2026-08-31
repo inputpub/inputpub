@@ -716,11 +716,17 @@ export function VaultSidebar({
   useEffect(() => () => clearTimeout(opMsgTimer.current), [])
 
   const refresh = () => {
-    loadVaultTree()
-      .then((data) => {
-        setEntries(data)
-        setLoadError(null)
-      })
+    // The cached listing paints first and the confirmed one lands behind it —
+    // usually identical, and identical fast enough that the tree never blinks.
+    // Both are dropped if the active vault changed while they were in flight.
+    const forId = activeVaultInstance()?.id
+    const apply = (data: VaultEntry[]) => {
+      if (activeVaultInstance()?.id !== forId) return
+      setEntries(data)
+      setLoadError(null)
+    }
+    loadVaultTree(apply)
+      .then(apply)
       .catch((err) => {
         const message = err instanceof Error ? err.message : String(err)
         setLoadError(message)

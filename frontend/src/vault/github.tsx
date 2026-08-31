@@ -53,9 +53,9 @@ function repoAndToken(ctx: VaultContext): { repo: string; token: string } {
   return { repo, token }
 }
 
-/** Resolves which branch to work against — the configured one, or the repo's
- *  default — and confirms the repo exists and is reachable with this token. */
-async function resolveBranch(ctx: VaultContext, repo: string, token: string): Promise<string> {
+/** Asks GitHub for the repo's default branch, confirming along the way that the
+ *  repo exists and is reachable with this token. */
+async function fetchDefaultBranch(repo: string, token: string): Promise<string> {
   const res = await ghGet(`https://api.github.com/repos/${repo}`, token)
   if (res.status === 404) {
     throw new Error(
@@ -64,8 +64,46 @@ async function resolveBranch(ctx: VaultContext, repo: string, token: string): Pr
   }
   if (!res.ok) throw new Error(`Couldn't read the repo (${res.status})`)
   const data = (await res.json()) as { default_branch?: string }
-  const branch = (ctx.getConfig('branch') ?? '').trim()
-  return branch || data.default_branch || 'main'
+  return data.default_branch || 'main'
+}
+
+// Every read and write below starts by working out which branch it's on, so an
+// unconditional lookup here is a round trip added to all of them — the one
+// that used to sit in front of the very first file read on launch. The answer
+// is a repo's default branch, which changes about never, so it's remembered
+// per instance (keyed by repo, in case the vault is re-pointed) and re-fetched
+// only when something downstream turns out not to be there. A branch the user
+// configured explicitly needs no lookup at all.
+const BRANCH_CACHE_KEY = 'branchCache'
+
+function cachedBranch(ctx: VaultContext, repo: string): string | undefined {
+  try {
+    const raw = ctx.getConfig(BRANCH_CACHE_KEY)
+    if (!raw) return undefined
+    const rec = JSON.parse(raw) as { repo?: string; branch?: string }
+    if (rec.repo === repo && typeof rec.branch === 'string' && rec.branch) return rec.branch
+  } catch {
+    /* unreadable — treat as a miss */
+  }
+  return undefined
+}
+
+/** Forgets the remembered default branch, so the next resolve asks GitHub
+ *  again. Called when a read fails in a way a stale branch would explain. */
+function forgetBranch(ctx: VaultContext): void {
+  ctx.setConfig(BRANCH_CACHE_KEY, '')
+}
+
+/** Resolves which branch to work against — the configured one, or the repo's
+ *  default (remembered between sessions, see above). */
+async function resolveBranch(ctx: VaultContext, repo: string, token: string): Promise<string> {
+  const configured = (ctx.getConfig('branch') ?? '').trim()
+  if (configured) return configured
+  const cached = cachedBranch(ctx, repo)
+  if (cached) return cached
+  const branch = await fetchDefaultBranch(repo, token)
+  ctx.setConfig(BRANCH_CACHE_KEY, JSON.stringify({ repo, branch }))
+  return branch
 }
 
 function contentsUrl(repo: string, path: string, ref?: string): string {
@@ -276,21 +314,42 @@ export const githubVault: VaultProvider = {
     return ctx.getConfig('repo')?.trim() || undefined
   },
 
+  /** The branch head: one small request that changes if and only if something
+   *  in the repo was committed. Nothing here is worth failing an operation
+   *  over — a repo with no commits yet has no ref at all — so an unreadable
+   *  head just reads as "can't say". */
+  async revision(ctx) {
+    const { repo, token } = repoAndToken(ctx)
+    const branch = await resolveBranch(ctx, repo, token)
+    const res = await ghGet(
+      `https://api.github.com/repos/${repo}/git/ref/heads/${encodeURIComponent(branch)}`,
+      token,
+    )
+    if (!res.ok) return undefined
+    const data = (await res.json()) as { object?: { sha?: string } }
+    return data.object?.sha
+  },
+
   async listTree(ctx) {
     const { repo, token } = repoAndToken(ctx)
     const branch = await resolveBranch(ctx, repo, token)
     const res = await treeWithInit(repo, token, branch)
     if (!res.ok) {
       const detail = await res.text().catch(() => '')
+      // A branch that isn't there is exactly what a remembered one going stale
+      // looks like (the repo was re-pointed, the default branch renamed), and
+      // the tree is the first thing every session reads — so let the miss clear
+      // it and heal the next load.
+      if (res.status === 404) forgetBranch(ctx)
       throw new Error(
         `Couldn't load the repo tree (${res.status})${detail ? `: ${detail.slice(0, 140)}` : ''}`,
       )
     }
-    const data = (await res.json()) as { tree?: { path: string; type: string }[] }
+    const data = (await res.json()) as { tree?: { path: string; type: string; sha?: string }[] }
     const entries: VaultEntry[] = []
     for (const item of data.tree ?? []) {
       if (item.type === 'tree') entries.push({ path: item.path, type: 'dir' })
-      else if (item.type === 'blob') entries.push({ path: item.path, type: 'file' })
+      else if (item.type === 'blob') entries.push({ path: item.path, type: 'file', sha: item.sha })
     }
     return entries
   },

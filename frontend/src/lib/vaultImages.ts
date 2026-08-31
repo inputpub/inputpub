@@ -1,4 +1,12 @@
-import { activeVaultInstance, currentVaultFile, vaultCtxFor, withWriteLock } from './vault'
+import {
+  activeVaultInstance,
+  currentVaultFile,
+  recordVaultFileAdded,
+  vaultCtxFor,
+  withWriteLock,
+  type VaultInstance,
+} from './vault'
+import { cacheBlob, cachedBlob } from './vaultCache'
 
 // Images pasted into a note are committed to the vault beside it, and the note
 // links to them by *relative* path (`../assets/foo.png`). That keeps a note
@@ -85,6 +93,20 @@ const objectUrls = new Set<string>()
 
 const keyFor = (instanceId: string, path: string) => `${instanceId}:${path}`
 
+/** The bytes for a vault path — off disk if they've been read before, off the
+ *  network otherwise. The disk copy is what keeps an image-heavy note from
+ *  re-downloading every image on every launch (see `warmVaultImages`, which
+ *  blocks the editor on exactly this); it's dropped when the file tree shows
+ *  the path's contents changed, so a stale hit isn't a thing that can happen.
+ *  Object URLs stay per-session — those can't outlive the page. */
+async function readImageBytes(instance: VaultInstance, path: string): Promise<Blob> {
+  const cached = await cachedBlob(instance.id, path)
+  if (cached) return cached
+  const blob = await instance.provider.readBinary(vaultCtxFor(instance.id), path)
+  cacheBlob(instance.id, path, blob)
+  return blob
+}
+
 function track(key: string, url: string): string {
   objectUrls.add(url)
   settled.set(key, url)
@@ -133,6 +155,10 @@ export async function uploadVaultImage(file: File): Promise<string> {
   // is both slower and liable to 404.
   const key = keyFor(active.id, path)
   cache.set(key, Promise.resolve(track(key, URL.createObjectURL(file))))
+  // Keep the bytes we already hold, so reopening the note doesn't download back
+  // the image that was just uploaded from this browser.
+  cacheBlob(active.id, path, file)
+  recordVaultFileAdded(path)
   for (const fn of uploadListeners) fn(path)
   return relativeFrom(dirOf(notePath), path)
 }
@@ -146,8 +172,7 @@ export function vaultFileObjectUrl(path: string): Promise<string> {
   const key = keyFor(active.id, path)
   const hit = cache.get(key)
   if (hit) return hit
-  const pending = active.provider
-    .readBinary(vaultCtxFor(active.id), path)
+  const pending = readImageBytes(active, path)
     .then((blob) => track(key, URL.createObjectURL(blob)))
     .catch((err) => {
       cache.delete(key)
@@ -230,8 +255,7 @@ export function resolveVaultImage(src: string): string | Promise<string> {
   const hit = cache.get(key)
   if (hit) return hit
 
-  const pending = active.provider
-    .readBinary(vaultCtxFor(active.id), path)
+  const pending = readImageBytes(active, path)
     .then((blob) => track(key, URL.createObjectURL(blob)))
     .catch(() => {
       // Leave a missing image broken rather than cached as broken — the file

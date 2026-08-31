@@ -33,10 +33,12 @@ import {
 } from './lib/storage'
 import {
   activeVaultBatchesWrites,
+  currentVaultBaseline,
   expectReloadEcho,
   flushPendingVaultSave,
   getVaultSaveError,
   getVaultSaveState,
+  onVaultFileRevalidated,
   onVaultSaveStateChange,
   openVaultFile,
   reopenLastVaultFile,
@@ -116,6 +118,10 @@ function App() {
   // The path of the vault file currently loaded into the editor, if any —
   // when set, edits save to the vault instead of the local draft.
   const [vaultPath, setVaultPath] = useState<string | undefined>(undefined)
+  // The same thing, updated the moment content is swapped rather than a render
+  // later — so a background revalidation arriving mid-render is matched against
+  // what the editor actually holds, not against state React hasn't committed.
+  const shownVaultPath = useRef<string | undefined>(undefined)
   // A non-editable file being previewed, shown instead of the editor while set.
   // Kept apart from vaultPath so the open note — and its unsaved edits —
   // survive a detour through an image.
@@ -174,9 +180,19 @@ function App() {
     shellRef.current?.style.setProperty('--drawer-progress', vaultSidebarOpen ? '1' : '0')
   }, [vaultSidebarOpen])
 
+  // Show a file just opened from the vault. Its content is read from lib/vault
+  // rather than taken as given: the file opens from cache and is checked
+  // against the vault in the background, and that check can land while this
+  // path is still warming images — in which case the newer content is what
+  // should reach the editor.
+  function showVaultDocument(content: string, path: string, focus = false) {
+    showDocument(currentVaultBaseline(path) ?? content, path, focus)
+  }
+
   // Swap the editor to new content (remount with a fresh seed) and record
   // which vault file it belongs to (undefined = the local draft).
   function showDocument(content: string, path: string | undefined, focus = false) {
+    shownVaultPath.current = path
     setSeed(content)
     setEditorKey((k) => k + 1)
     setVaultPath(path)
@@ -213,10 +229,21 @@ function App() {
       // Same reason as in openVaultPath: have the images in hand before the
       // editor mounts, or each renders broken first.
       await warmVaultImages(opened.content)
-      showDocument(opened.content, opened.path)
+      showVaultDocument(opened.content, opened.path)
       if (getVaultSidebarOpen() === undefined) showVaultSidebar(true)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // A file opens from the local cache and is checked against the vault right
+  // after — when that check finds a newer version (edited on another device,
+  // or straight on GitHub), swap it in. lib/vault only reports this for a file
+  // with no unsaved edits, so nothing being typed can be replaced underfoot.
+  useEffect(() => {
+    return onVaultFileRevalidated((file) => {
+      if (file.path !== shownVaultPath.current) return
+      void warmVaultImages(file.content).then(() => showDocument(file.content, file.path))
+    })
   }, [])
 
   // Reflect lib/vault's save state (updated outside React, by the staging/
@@ -322,7 +349,7 @@ function App() {
       // bytes are fetched. Folded into the spinner that's already up for the
       // note read, and time-bounded, so it can only ever cost a moment.
       await warmVaultImages(content)
-      showDocument(content, path, true)
+      showVaultDocument(content, path, true)
       resetVaultSaveState()
     } catch (err) {
       setVaultPath(prev) // load failed — the old document is still what's shown
